@@ -26,7 +26,8 @@ from PIL import Image, ImageDraw
 
 RATIOS = {"16x9": 1366, "16x10": 1230}
 RECIPE = "whole-frame-v2-atlas-bottom768"
-PACK_RECIPE = "isolated-background-material-alpha-v4"
+PACK_RECIPE = "isolated-background-native-foreground-v5"
+CLEAN_PLATES = {"club_dans_render_02.tga": ["club_disko02.xml"]}
 EXCLUDE = {"startup.xml", "menu.xml", "map.xml", "chemodan.xml", "shiva.xml",
            "trax.xml", "gameboom.xml", "gameover.xml", "happyend.xml", "intro.xml",
            "intro2.xml", "introvzlab.xml"}
@@ -303,10 +304,13 @@ def align_frame(frame, original):
         requiresEdgeReview=True)
 
 
-def accept(work, ident, generated, align=False):
+def accept(work, ident, generated, align=False, native_foreground=False, source_aligned=False):
     work = Path(work)
     manifest = load(work/"manifest.json")
     row = next(t for t in manifest["textures"] if t["id"] == ident or asset_key(t["name"]) == asset_key(ident))
+    native_scenes=CLEAN_PLATES.get(asset_key(row['name']),[]) if native_foreground else []
+    if native_foreground and not native_scenes:
+        raise ValueError('No registered native foreground for this clean plate')
     generated = Path(generated).resolve()
     # Services may emit a larger raster of the requested composition.
     # Normalize the generated frame; the reference is only used for comparison.
@@ -336,6 +340,8 @@ def accept(work, ident, generated, align=False):
                           sourceArchiveSha256=manifest['archiveSha256'], sourceTextureSha256=row['sourceSha256'],
                           sourceReferenceSha256=row['centerRgbaSha256'], recipe=RECIPE,
                           generator="external image outpainting; see incoming provenance", registration=registration,
+                          nativeForegroundScenes=native_scenes,
+                          sourceAlignedSceneArt=bool(source_aligned or align),
                           edgeReview="pending: generator seams and new geometry need visual inspection",variants=proofs)
         save(work/"out"/(row["id"]+".json"), provenance)
     before = Image.new("RGBA", (1366,768), (12,18,20,255));before.paste(original,(171,0))
@@ -347,6 +353,38 @@ def accept(work, ident, generated, align=False):
     comparison.save(work/"out"/(row["id"]+"-comparison.jpg"))
     make_report(work)
     print("Accepted complete regenerated frame:",row["name"])
+
+
+def incoming_options(raw):
+    """Optional per-frame metadata travels with user-supplied generated art."""
+    path=Path(raw).with_suffix('.json')
+    if not path.exists():return False,False
+    metadata=load(path)
+    for key in ('nativeForeground','sourceAlignedSceneArt'):
+        if key in metadata and not isinstance(metadata[key],bool):
+            raise ValueError('Expected boolean incoming metadata: '+key)
+    return metadata.get('nativeForeground',False),metadata.get('sourceAlignedSceneArt',False)
+
+
+def original_scenes(work, manifest):
+    """Explicit local exceptions; never silently hide unfinished world scenes."""
+    path=Path(work)/'original-scenes.txt'
+    if not path.exists():return set()
+    selected={asset_key(line.strip()) for line in path.read_text(encoding='utf-8-sig').splitlines()
+              if line.strip() and not line.lstrip().startswith('#')}
+    world={asset_key(s['name']):s for s in manifest['scenes'] if not s['excluded']}
+    if not selected<=world.keys():
+        raise ValueError('Unknown/non-world original-scene exception: '+str(sorted(selected-world.keys())))
+    kept={bg for name in selected for bg in world[name]['backgrounds']}
+    required={bg for name,s in world.items() if name not in selected for bg in s['backgrounds']}
+    if kept&required:
+        raise ValueError('Original-scene exceptions share backgrounds with widened scenes; list every alias')
+    return selected
+
+
+def required_backgrounds(manifest, retained):
+    return {key for s in manifest['scenes'] if not s['excluded'] and asset_key(s['name']) not in retained
+            for key in s['backgrounds']}
 
 
 def expand_part(part, model, width):
@@ -381,8 +419,9 @@ def pack(work, ratio, require_complete=False):
         raise ValueError("Source archive changed; extract again to a different workspace")
     archive = Archive(archive_path)
     width=RATIOS[ratio];left=(width-1024)//2
-    required={key for s in manifest['scenes'] if not s['excluded'] for key in s['backgrounds']}
-    ready={}
+    retained=original_scenes(work,manifest)
+    required=required_backgrounds(manifest,retained)
+    ready={};native_scenes=set();aligned_scenes=set()
     for row in manifest["textures"]:
         if asset_key(row['name']) not in required:continue
         path=work/"out"/ratio/(row["id"]+".png")
@@ -398,8 +437,14 @@ def pack(work, ratio, require_complete=False):
             raise ValueError(f"Old composited output must be accepted again: {path}")
         if file_hash(path)!=proof['variants'][ratio]['sha256']:
             raise ValueError(f"Accepted output changed: {path}")
+        requested={asset_key(n) for n in proof.get('nativeForegroundScenes',[])}
+        if not requested<=set(CLEAN_PLATES.get(asset_key(row['name']),[])):
+            raise ValueError('Unsupported clean-plate foreground provenance: '+row['name'])
         if all(r["extendable"] for r in row["references"]):
             ready[asset_key(row["name"])]=(row,im)
+            native_scenes.update(requested)
+            if proof.get('sourceAlignedSceneArt'):
+                aligned_scenes.update(asset_key(n) for n in row['scenes'])
     if require_complete and set(ready)!=required:
         raise ValueError(f"Only {len(ready)}/{len(required)} world backgrounds generated and extendable")
     if not ready:
@@ -452,6 +497,16 @@ def pack(work, ratio, require_complete=False):
                         part["uv"][index]=(part["uv"][index]*1024+left)/2048
         if changed:
             replacements[name]=write_meat(mesh);affected.append(name)
+    from widescreen_foreground import build_foreground_replacements
+    foreground,foreground_proof=build_foreground_replacements(archive,native_scenes)
+    if set(map(asset_key,foreground))&set(map(asset_key,replacements)):
+        raise ValueError('Foreground repair overlaps a background replacement')
+    replacements.update(foreground)
+    from widescreen_occluders import build_poster_replacements
+    posters,poster_proof=build_poster_replacements(archive,aligned_scenes,background_textures,width)
+    if set(map(asset_key,posters))&set(map(asset_key,replacements)):
+        raise ValueError('Poster repair overlaps another replacement')
+    replacements.update(posters)
     folder=work/"mod"/ratio;folder.mkdir(parents=True,exist_ok=True)
     # Archive.build also retains unchanged compressed payloads/duplicate ordering.
     data=archive.build(replacements)
@@ -463,15 +518,19 @@ def pack(work, ratio, require_complete=False):
     for name,data in replacements.items():
         if check.read(name)!=data:raise AssertionError("Mod roundtrip failed: "+name)
     ready_keys=set(ready)
-    allowed=[s["name"] for s in manifest["scenes"] if not s["excluded"] and s["backgrounds"] and
+    allowed=[s["name"] for s in manifest["scenes"] if not s["excluded"] and asset_key(s['name']) not in retained and s["backgrounds"] and
              not s["unresolved"] and set(s["backgrounds"])<=ready_keys]
     (folder/"widescreen-scenes.txt").write_text("\n".join(allowed)+"\n",encoding="utf-8")
     proof=dict(ratio=ratio,sourceSha256=manifest["archiveSha256"],modSha256=file_hash(target),
                recipe=PACK_RECIPE,generatedOutputs={row['id']:file_hash(work/'out'/ratio/(row['id']+'.png')) for row,_ in ready.values()},
-               dedicatedBackgroundTextures=background_textures,originalPropResourcesPreserved=True,
+               dedicatedBackgroundTextures=background_textures,originalPropResourcesPreserved=not (foreground or posters),
+               originalPropTexturesAndMaterialsPreserved=True,nativeForeground=foreground_proof,
+               modifiedForegroundMeshes=sorted(foreground),posterOccluders=poster_proof,
                originalAlphaMattesPreserved=True,originalCenterRgbComposited=False,
                generatedBackgrounds=len(ready),eligibleScenes=allowed,modifiedMeshes=sorted(affected),
-               completeWorldBackgrounds=set(ready)==required, originalCenterComposited=False,
+               completeRequestedWorldBackgrounds=set(ready)==required,
+               completeWorldBackgrounds=set(ready)==required and not retained,
+               userSelectedOriginalScenes=sorted(retained),originalCenterComposited=False,
                replacedMembers=sorted(replacements),originalUnchanged=file_hash(archive_path)==manifest["archiveSha256"])
     save(folder/"proof.json",proof);make_report(work)
     print(f"Built {target}: {len(ready)} backgrounds, {len(allowed)} eligible scenes")
@@ -509,7 +568,9 @@ def import_captures(work, ratio, report):
     work=Path(work);report=Path(report);data=load(report)
     proof=load(work/'mod'/ratio/'proof.json')
     actual=file_hash(work/'mod'/ratio/'QUEST.ezd')
-    if actual!=proof['modSha256'] or data['inputs']['archiveSha256']!=actual or data['inputs']['aspect']!=ratio.replace('x',':'):
+    allowlist=file_hash(work/'mod'/ratio/'widescreen-scenes.txt')
+    if (actual!=proof['modSha256'] or data['inputs']['archiveSha256']!=actual or
+            data['inputs']['aspect']!=ratio.replace('x',':') or data['inputs'].get('allowlistSha256')!=allowlist):
         raise ValueError('Capture inputs do not match current mod/aspect; screenshots are stale')
     captures=load(work/'captures.json') if (work/'captures.json').exists() else {}
     for row in data['scenes']:
@@ -527,7 +588,7 @@ def pipeline(archive, work, incoming, linux_exe=None, partial=False, align=False
     manifest=load(work/'manifest.json')
     if file_hash(archive)!=manifest['archiveSha256']:
         raise ValueError('Archive fingerprint differs from saved workspace; choose another --work')
-    required={key for s in manifest['scenes'] if not s['excluded'] for key in s['backgrounds']}
+    required=required_backgrounds(manifest,original_scenes(work,manifest))
     missing=[]
     incoming=Path(incoming or work/'incoming')
     for row in manifest['textures']:
@@ -535,12 +596,15 @@ def pipeline(archive, work, incoming, linux_exe=None, partial=False, align=False
         raw=incoming/(row['id']+'.png')
         proof=work/'out'/(row['id']+'.json')
         previous=load(proof) if proof.exists() else {}
+        native_foreground,source_aligned=incoming_options(raw)
         fresh=(raw.exists() and previous.get('inputSha256')==file_hash(raw) and
                previous.get('sourceArchiveSha256')==manifest['archiveSha256'] and
                previous.get('sourceTextureSha256')==row['sourceSha256'] and previous.get('recipe')==RECIPE and
                previous.get('variants',{}).get('16x9',{}).get('originalCenterComposited') is False and
-               bool(previous.get('registration'))==align)
-        if raw.exists() and not fresh:accept(work,row['id'],raw,align)
+               bool(previous.get('registration'))==align and
+               bool(previous.get('nativeForegroundScenes'))==native_foreground and
+               bool(previous.get('sourceAlignedSceneArt'))==bool(source_aligned or align))
+        if raw.exists() and not fresh:accept(work,row['id'],raw,align,native_foreground,source_aligned)
         elif not raw.exists():missing.append(row['id'])
     if missing and not partial:
         save(work/'pending-generation.json',missing)
@@ -565,10 +629,11 @@ def pipeline(archive, work, incoming, linux_exe=None, partial=False, align=False
 
 def make_report(work):
     work=Path(work);manifest=load(work/"manifest.json")
+    retained=original_scenes(work,manifest)
     captures=load(work/"captures.json") if (work/"captures.json").exists() else {}
     reviews=load(work/"reviews.json") if (work/"reviews.json").exists() else {}
     accepted={t["name"] for t in manifest["textures"] if (work/"out"/(t["id"]+".json")).exists()}
-    current={}
+    current={};current_allowlists={}
     for ratio in RATIOS:
         proofpath=work/'mod'/ratio/'proof.json'
         if not proofpath.exists():continue
@@ -577,8 +642,10 @@ def make_report(work):
         assets_fresh=all((work/'out'/ratio/(ident+'.png')).exists() and
                          file_hash(work/'out'/ratio/(ident+'.png'))==value
                          for ident,value in proof.get('generatedOutputs',{}).items())
-        if actual==proof['modSha256'] and assets_fresh and proof.get('recipe')==PACK_RECIPE:
+        if (actual==proof['modSha256'] and assets_fresh and proof.get('recipe')==PACK_RECIPE and
+                proof.get('userSelectedOriginalScenes',[])==sorted(original_scenes(work,manifest))):
             current[ratio]=actual
+            current_allowlists[ratio]=file_hash(work/'mod'/ratio/'widescreen-scenes.txt')
     lines=["# Widescreen validation", "", f"Source archive SHA256: `{manifest['archiveSha256']}`", "",
            f"Scenes inventoried: {len(manifest['scenes'])}. Background candidates: {len(manifest['textures'])}. "
            f"Generated/accepted: {len(accepted)}.", "",
@@ -588,18 +655,22 @@ def make_report(work):
     for scene in manifest["scenes"]:
         name=scene["name"]
         state="4:3 UI/cutscene/minigame" if scene["excluded"] else "; ".join(scene["unresolved"]) or ("background mapped" if scene["backgrounds"] else "no full-plane background; review needed")
+        if asset_key(name) in retained:state='4:3 original: explicit user exception'
         captured=captures.get(name,{})
         runs=[]
         for ratio in RATIOS:
             evidence=captured.get(ratio,{})
             screenshot=evidence.get('screenshot')
             status=evidence.get('status','UNTESTED')
-            if evidence and evidence.get('inputs',{}).get('archiveSha256')!=current.get(ratio):
+            if evidence and (evidence.get('inputs',{}).get('archiveSha256')!=current.get(ratio) or
+                    evidence.get('inputs',{}).get('allowlistSha256')!=current_allowlists.get(ratio)):
                 status='STALE CAPTURE: rerun required'
             if evidence and not evidence.get('expanded'):status+=' central fallback'
             runs.append(f"{ratio}: [{status}]({screenshot})" if screenshot else f'{ratio}: {status}')
         runtime='<br>'.join(runs)
         review=reviews.get(name,{}).get("notes","UNREVIEWED: crop, occlusion, walk boundary, moving camera")
+        if reviews.get(name,{}).get('knownRuntimeIssue'):
+            review+=' Runtime limitation: '+reviews[name]['knownRuntimeIssue']
         lines.append(f"| {name} | {state} | {runtime} | {review} |")
     (work/"report.md").write_text("\n".join(lines)+"\n",encoding="utf-8")
 
@@ -611,6 +682,8 @@ def main():
     p=sub.add_parser("extract");p.add_argument("--archive",type=Path,required=True)
     p=sub.add_parser("accept");p.add_argument("texture");p.add_argument("generated",type=Path)
     p.add_argument("--align",action="store_true",help="Register generated frame with optional OpenCV; inspect seams afterwards")
+    p.add_argument('--native-foreground',action='store_true',help='Registered clean plate omits booth/platform; restore its native foreground silhouette')
+    p.add_argument('--source-aligned',action='store_true',help='Generated RGB was already registered to the source camera; enable matching native poster/wall separation')
     p=sub.add_parser("pack");p.add_argument("--ratio",choices=RATIOS,default="16x9");p.add_argument("--require-complete",action="store_true")
     p=sub.add_parser('run');p.add_argument('--archive',type=Path,required=True);p.add_argument('--incoming',type=Path)
     p.add_argument('--linux-exe',type=Path);p.add_argument('--partial',action='store_true');p.add_argument('--align',action='store_true')
@@ -621,7 +694,7 @@ def main():
     if not a.work.resolve().is_relative_to((ROOT/'build').resolve()):
         parser.error('--work must stay inside this repository build/ directory')
     if a.command=="extract":extract(a.archive,a.work)
-    elif a.command=="accept":accept(a.work,a.texture,a.generated,a.align)
+    elif a.command=="accept":accept(a.work,a.texture,a.generated,a.align,a.native_foreground,a.source_aligned)
     elif a.command=="pack":pack(a.work,a.ratio,a.require_complete)
     elif a.command=='run':return pipeline(a.archive,a.work,a.incoming,a.linux_exe,a.partial,a.align)
     elif a.command=='capture-results':import_captures(a.work,a.ratio,a.report)

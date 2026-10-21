@@ -98,6 +98,46 @@ class PipelineTests(unittest.TestCase):
         self.assertFalse((self.work/'mod').exists())
         with self.assertRaises(ValueError):ws.pack(self.work,'16x9',True)
 
+    def test_clean_plate_cannot_request_an_unregistered_foreground(self):
+        generated=self.root/'generated.png';Image.new('RGB',(1366,768),'blue').save(generated)
+        with self.assertRaisesRegex(ValueError,'No registered native foreground'):
+            ws.accept(self.work,self.row['id'],generated,native_foreground=True)
+        ws.accept(self.work,self.row['id'],generated)
+        proof=self.work/'out'/(self.row['id']+'.json');data=ws.load(proof)
+        data['nativeForegroundScenes']=['club_disko02.xml'];ws.save(proof,data)
+        with self.assertRaisesRegex(ValueError,'Unsupported clean-plate'):
+            ws.pack(self.work,'16x9',True)
+
+    def test_incoming_registration_metadata_survives_pipeline_rebuild(self):
+        incoming=self.work/'incoming';incoming.mkdir()
+        generated=incoming/(self.row['id']+'.png')
+        Image.new('RGB',(1366,768),'blue').save(generated)
+        ws.save(generated.with_suffix('.json'),dict(sourceAlignedSceneArt=True,nativeForeground=False))
+        self.assertEqual(ws.pipeline(self.original,self.work,incoming),0)
+        proof=self.work/'out'/(self.row['id']+'.json')
+        self.assertTrue(ws.load(proof)['sourceAlignedSceneArt'])
+        # A subsequent normal rebuild must retain the explicit registration.
+        self.assertEqual(ws.pipeline(self.original,self.work,incoming),0)
+        self.assertTrue(ws.load(proof)['sourceAlignedSceneArt'])
+        ws.save(generated.with_suffix('.json'),dict(nativeForeground='false'))
+        with self.assertRaisesRegex(ValueError,'Expected boolean'):
+            ws.pipeline(self.original,self.work,incoming)
+
+    def test_explicit_original_exceptions_validate_aliases_and_names(self):
+        path=self.work/'original-scenes.txt'
+        path.write_text('unknown.xml\n')
+        with self.assertRaisesRegex(ValueError,'Unknown/non-world'):
+            ws.original_scenes(self.work,self.manifest)
+        alias=copy.deepcopy(self.manifest['scenes'][0]);alias['name']='street_n.xml'
+        manifest=copy.deepcopy(self.manifest);manifest['scenes'].append(alias)
+        path.write_text('street.xml\n')
+        with self.assertRaisesRegex(ValueError,'every alias'):
+            ws.original_scenes(self.work,manifest)
+        path.write_text('# Explicit original backgrounds\nstreet.xml\nstreet_n.xml\n')
+        retained=ws.original_scenes(self.work,manifest)
+        self.assertEqual(retained,{'street.xml','street_n.xml'})
+        self.assertEqual(ws.required_backgrounds(manifest,retained),set())
+
     def test_modified_source_is_rejected(self):
         self.original.write_bytes(self.original.read_bytes()+b'x')
         with self.assertRaisesRegex(ValueError,'changed'):ws.pack(self.work,'16x9')
@@ -107,7 +147,8 @@ class PipelineTests(unittest.TestCase):
         ws.accept(self.work,self.row['id'],generated);ws.pack(self.work,'16x9',True)
         proof=ws.load(self.work/'mod/16x9/proof.json')
         report=self.work/'validation/report.json'
-        ws.save(report,dict(inputs=dict(archiveSha256=proof['modSha256'],aspect='16:9'),scenes=[dict(
+        ws.save(report,dict(inputs=dict(archiveSha256=proof['modSha256'],aspect='16:9',
+            allowlistSha256=ws.file_hash(self.work/'mod/16x9/widescreen-scenes.txt')),scenes=[dict(
             scene='street.xml',passed=True,worldExpanded=True,screenshot='scene.png')]))
         ws.import_captures(self.work,'16x9',report)
         self.assertIn('PASS load',(self.work/'report.md').read_text())
@@ -115,6 +156,20 @@ class PipelineTests(unittest.TestCase):
         ws.accept(self.work,self.row['id'],generated)
         self.assertIn('STALE CAPTURE',(self.work/'report.md').read_text())
         ws.pack(self.work,'16x9',True)
+        with self.assertRaisesRegex(ValueError,'stale'):ws.import_captures(self.work,'16x9',report)
+
+    def test_capture_with_changed_scene_allowlist_is_stale(self):
+        generated=self.root/'generated.png';Image.new('RGB',(1366,768),'blue').save(generated)
+        ws.accept(self.work,self.row['id'],generated);ws.pack(self.work,'16x9',True)
+        proof=ws.load(self.work/'mod/16x9/proof.json');allowlist=self.work/'mod/16x9/widescreen-scenes.txt'
+        report=self.work/'validation/report.json'
+        ws.save(report,dict(inputs=dict(archiveSha256=proof['modSha256'],aspect='16:9',
+            allowlistSha256=ws.file_hash(allowlist)),scenes=[dict(scene='street.xml',passed=True,
+            worldExpanded=True,screenshot='scene.png')]))
+        ws.import_captures(self.work,'16x9',report)
+        allowlist.write_text('')
+        ws.make_report(self.work)
+        self.assertIn('STALE CAPTURE',(self.work/'report.md').read_text())
         with self.assertRaisesRegex(ValueError,'stale'):ws.import_captures(self.work,'16x9',report)
 
     def test_extract_does_not_rebind_existing_generation_to_another_archive(self):

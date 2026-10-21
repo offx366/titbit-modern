@@ -1,33 +1,31 @@
 {
   "mode": "built-in image_gen; whole generated RGB, never original-center RGB compositing",
-  "texture": "club_dans_render_02.tga",
   "logicalSize": [
     1366,
     768
   ],
-  "maskPreparation": "Use the source atlas alpha cropped to its bottom 768 rows. Center the 1024x768 alpha in a black 1366x768 guide at x=171. This is a silhouette guide, not proof of foreground mesh coverage.",
-  "steps": [
-    {
-      "name": "initial-layout",
-      "prompt": "Use case: precise-object-edit. Create a seamless fully generated 1366x768 opaque 16:9 reconstruction of the supplied vintage 2003 prerendered nightclub background. Image1 is original1024x768 centered at x171 within1366x768 canvas; empty side strips must become natural continuation of same room. Image2 is a LAYOUT GUIDE ONLY, not desired colors: white silhouette marks exact screen-space bounds of DJ counter and platform. Render original textured DJ counter EXACTLY within this silhouette, with same top edge, front plane, right side plane, polygonal base and equipment silhouettes. Keep original geometry and dark black-green-silver lighting, direction and location of all green/white straight laser lines, grid ceiling/floor vanishing points. In normalized1366x768: booth top from(497,258)to(946,292), left front edge x500 y290..500, lower platform vertices approximately(455,440),(458,534),(524,596),(694,653),(883,680),(1120,667),(1129,565),(945,458). Do not replace original booth with a differently shaped counter, move/resize it, curve its straight edges, add extra steps, change perspective, add extra equipment, people or signs. Crucial: matching exact counter silhouette and its silver horizontal edge lighting lets original foreground cutout overlay seamlessly. Generate entire RGB frame coherently, no pasted old center, no borders, no camera movement, no zoom. Treat white mask only as geometric location guide; never show mask in final artwork. Extend only physical room sideways while maintaining1024-center layout.",
-      "references": [
-        "original background centered in a 1366x768 canvas",
-        "centered source atlas alpha silhouette guide"
-      ]
+  "nativeForegroundCleanPlate": {
+    "texture": "club_dans_render_02.tga",
+    "prompt": "Use case: precise-object-edit, object removal clean plate. Edit supplied1366x768 nightclub room background. REMOVE the ENTIRE central DJ booth including all desk equipment, counter top, frontal box, cords/cables draped on it, lower polygonal raised platform and its front fascia; also remove their cast shadows. Fill the vacated area with a natural CONTINUOUS flat tiled dance floor below and black glitter room back wall above, carrying the same white/green straight laser beams naturally across wall. The floor is uninterrupted single level, no podium, stairs, platforms, furniture or remnants. Preserve the camera, exact framing/vertical field of view, all surrounding walls, ceiling/floor grid perspective, left speaker and upper right spotlight, lighting/palette, early2000s CGI style. No people or new props. Preserve all existing frame outside former booth area as much as possible. The game will render the actual booth separately afterward, so this image must contain ZERO booth, equipment or platform. Output a complete opaque16:9 clean plate, no borders.",
+    "acceptOptions": {
+      "nativeForeground": true
     },
-    {
-      "name": "registration",
-      "tool": "tools/widescreen.py accept --align",
-      "note": "Optional SIFT/RANSAC registration uses generated pixels only. Inspect borders before reuse as an edit target."
+    "reason": "Original model renders booth and platform. Background must not contain a duplicate."
+  },
+  "cameraRegistration": {
+    "method": "SIFT/RANSAC homography of generated RGB only; original reference used for coordinates, never RGB compositing",
+    "acceptOptions": {
+      "sourceAlignedSceneArt": true
     },
-    {
-      "name": "platform-correction",
-      "prompt": "Use case: precise-object-edit. Image1 is the EDIT TARGET: an already generated16:9 early2000s nightclub DJ booth background. Image2 is a same-size exact geometric silhouette guide, white marks the DJ counter PLUS its lower raised polygonal platform. Make ONE small correction ONLY to the lower raised platform in Image1 so its outer boundary matches Image2 exactly. Keep EVERYTHING ELSE fixed: camera, dimensions, framing, ceiling/floor grids, surrounding black/glitter walls and white/green lasers, speaker left, spotlight top, all equipment and the upper counter. Do NOT redesign or move upper counter. In1366x768 coordinates platform silhouette starts left around(458,439), has outer-left boundary(454,460)to(457,535), lower-left corner(524,596), lower-front edge(694,653)to(883,680), bottom-right boundary(1119,667), far-right corner(1129,566), rising back-right edge to(941,458). Correct vertical depth and front fascia so nearest bottom reaches y680, not y640, without adding new steps or changing silver rim design. Surface shading/material same black-green-silver vintage CGI. Preserve the generated target around this small edit; no pasted source photograph, no original RGB compositing, no white guide visible in final. Output one complete opaque16:9 frame with exactly same composition as Image1 apart from this platform-edge correction.",
-      "references": [
-        "registered fully generated frame",
-        "same centered source alpha silhouette guide"
-      ]
-    }
-  ],
+    "qualityCheck": "Compare native camera landmarks and foreground occluders, inspect all borders. Fewer matches need manual review."
+  },
+  "borderRepair": {
+    "references": [
+      "registered generated target",
+      "binary missing-pixel mask"
+    ],
+    "prompt": "Edit only the empty masked edge of the supplied already generated game background. Continue the same architecture, floor perspective, lighting and early-2000s prerendered style. Preserve existing framing and interior geometry. Do not add people, props, pipes, signage, borders or text. Produce one complete opaque 16:9 frame. The original game image is not a pixel-compositing source.",
+    "composition": "Keep registered generated interior; apply newly generated RGB only to missing border plus a small feather. Save actual prompt, target/mask/output hashes and registration matrix with incoming PNG."
+  },
   "validation": "Render the real scene with original foreground props. Successful scene loading alone does not establish visual alignment."
 }
