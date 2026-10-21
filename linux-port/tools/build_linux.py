@@ -17,7 +17,7 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-BUILD = ROOT/'build'
+BUILD = Path(os.environ.get('TITBIT_BUILD_DIR', ROOT/'build')).resolve()
 EXTRA_SOURCES = ('platform/game_entry_ms.cpp', 'platform/game_initializers_ms.cpp', 'src/linux_runtime/missing_members.cpp',
                  'src/linux_runtime/lane_string_members.cpp')
 
@@ -63,6 +63,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--vc98', type=Path,
                         help='Optional reference build with legacy VC98 headers; normal builds do not use VC6')
+    parser.add_argument('--build-dir', type=Path, help='Isolated build output; leaves the existing build unchanged')
     parser.add_argument('--jobs', type=int, default=4)
     parser.add_argument('--ffmpeg', type=Path, default=os.environ.get('TITBIT_FFMPEG'),
                         help='Prefix of the minimal static FFmpeg from tools/build_ffmpeg_min.sh (fewer runtime libraries)')
@@ -72,7 +73,11 @@ def main():
                         help='Prefix of the static SDL2 from tools/build_sdl2_min.sh (X11/Wayland/audio loaded at run time)')
     parser.add_argument('--check', action='store_true', help='Check toolchain and ELF32 execution without rebuilding')
     parser.add_argument('--test-runtime', action='store_true', help='Also execute string/EH/locale/FILE32 checks')
+    global BUILD
     args = parser.parse_args()
+    if args.build_dir:
+        BUILD = args.build_dir.resolve()
+    os.environ['TITBIT_BUILD_DIR'] = str(BUILD)
     if args.jobs < 1 or args.jobs > 64:
         parser.error('--jobs must be between 1 and 64')
     vc98 = args.vc98.expanduser().resolve() if args.vc98 else None
@@ -134,7 +139,7 @@ def main():
         with log.open('w') as stream:
             result = subprocess.run(command, cwd=ROOT, env=environment, stdout=stream, stderr=subprocess.STDOUT)
         row = {'stage': name, 'command': command, 'exitCode': result.returncode,
-               'seconds': round(time.monotonic()-start, 2), 'log': str(log.relative_to(ROOT))}
+               'seconds': round(time.monotonic()-start, 2), 'log': os.path.relpath(log, ROOT)}
         report['steps'].append(row)
         write_report(report_path, report)
         if result.returncode:
@@ -173,7 +178,7 @@ def main():
             stage('07 Verify native CRT and C++ header ABI',
                   [sys.executable, str(ROOT/'tools/check_cpp_runtime.py')]+(['--vc98', str(vc98)] if vc98 else []))
         report.update(status='complete', seconds=round(time.monotonic()-started, 2),
-                      output={'path': str(executable.relative_to(ROOT)),
+                      output={'path': os.path.relpath(executable, ROOT),
                               'sha256': hashlib.sha256(executable.read_bytes()).hexdigest()})
         print('Built: '+str(executable))
         print('Game assets and gameplay validation are separate; see docs/BUILD-LINUX.md.')

@@ -14,9 +14,75 @@ static RECT game_rect, window_rect;
 static bool is_fullscreen, stretch;
 static int logical_width = 1024, logical_height = 768;
 static bool exclusive_checked, exclusive;
+static bool wide_scene;
+static bool WideRequested() {
+ static int configured = -1;
+ if (configured < 0) configured = CompatSettingIs("aspect", "fit", "widescreen");
+ return configured != 0;
+}
 static bool Exclusive() {
  if (!exclusive_checked) { exclusive = CompatSettingIs("display", "fullscreen", "exclusive"); exclusive_checked = true; }
  return exclusive;
+}
+static bool WideActive() { return !Exclusive() && wide_scene && WideRequested(); }
+extern "C" const char *__stdcall CompatInitialScene(void) {
+ static char scene[128];
+ char enabled[8], desktop[256]; DWORD needed;
+ if (GetEnvironmentVariableA("TITBIT_WIDESCREEN_VALIDATION", enabled, sizeof(enabled)) != 1 || enabled[0] != '1')
+  return "startup.XML";
+ if (!GetUserObjectInformationA(GetThreadDesktop(GetCurrentThreadId()), UOI_NAME,
+                               desktop, sizeof(desktop), &needed) || lstrcmpiA(desktop, "default") == 0)
+  return "startup.XML";
+ DWORD length = GetEnvironmentVariableA("TITBIT_VALIDATE_SCENE", scene, sizeof(scene));
+ if (length < 5 || length >= sizeof(scene) || lstrcmpiA(scene + length - 4, ".xml") != 0)
+  return "startup.XML";
+ for (DWORD i = 0; i < length - 4; ++i) {
+  char c = scene[i];
+  if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') || c == '_' || c == '-')) return "startup.XML";
+ }
+ return scene;
+}
+/* Fail closed: a scene is wide only after the local mod pipeline listed it as
+ * having complete extended artwork/geometry. Do not widen menu/minigame scenes
+ * by guessing from their filename or their camera's FOV. */
+extern "C" void __stdcall CompatSceneChanged(const char *path) {
+ wide_scene = false;
+ if (!WideRequested() || !path) return;
+ WCHAR list[MAX_PATH];
+ DWORD n = GetEnvironmentVariableW(L"TITBIT_WIDESCREEN_SCENES", list, MAX_PATH);
+ if (!n) {
+  n = GetModuleFileNameW(0, list, MAX_PATH);
+  if (!n || n >= MAX_PATH) return;
+  while (n && list[n-1] != L'\\' && list[n-1] != L'/') --n;
+  list[n] = 0;
+  if (n + sizeof("widescreen-scenes.txt") > MAX_PATH) return;
+  lstrcatW(list, L"widescreen-scenes.txt");
+ } else if (n >= MAX_PATH) return;
+ HANDLE file = CreateFileW(list, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+ if (file == INVALID_HANDLE_VALUE) return;
+ DWORD size = GetFileSize(file, 0), read = 0;
+ if (size == INVALID_FILE_SIZE || size > 65536) { CloseHandle(file); return; }
+ char *data = (char *)CompatAlloc(size + 1);
+ if (!data) { CloseHandle(file); return; }
+ BOOL ok = ReadFile(file, data, size, &read, 0);
+ CloseHandle(file);
+ if (ok && read == size) {
+  const char *name = path;
+  for (const char *p = path; *p; ++p) if (*p == '/' || *p == '\\') name = p+1;
+  char *line = data;
+  while (*line) {
+   char *end = line;
+   while (*end && *end != '\n' && *end != '\r') ++end;
+   char delimiter = *end; *end = 0;
+   if (*line != '#' && lstrcmpiA(line, name) == 0) { wide_scene = true; break; }
+   if (!delimiter) break;
+   line = end + 1;
+   while (*line == '\r' || *line == '\n') ++line;
+  }
+ }
+ CompatFree(data);
+ CompatLog("widescreen", wide_scene ? "scene enabled" : "scene kept central", 0);
 }
 static bool IsGameClass(const char *name) {
  return name && (unsigned long)name > 0xffff && lstrcmpiA(name, "OpenGL") == 0;
@@ -90,7 +156,66 @@ static RECT WindowPlacement(DWORD style, DWORD ex_style) {
 static CompatViewport Viewport(HWND window) {
  RECT rect = {0, 0, logical_width, logical_height};
  if (window) GetClientRect(window, &rect);
+ if (WideActive()) {
+  char ratio[32]; CompatSetting("widescreen_ratio", "auto", ratio, sizeof(ratio));
+  bool ten = lstrcmpiA(ratio, "16:10") == 0 ||
+             (lstrcmpiA(ratio, "auto") == 0 && rect.right * 10 < rect.bottom * 17);
+  CompatViewport vp = CompatFitViewport(rect.right, rect.bottom, 16, ten ? 10 : 9, false);
+  // 1366x768 is the integer raster for 16:9; avoid a one-pixel bar introduced
+  // only by the rational aspect's rounding (also applies to even 1230x768).
+  if (rect.right - vp.width <= 2 && rect.bottom - vp.height <= 2) {
+   vp.x = vp.y = vp.top = 0; vp.width = rect.right; vp.height = rect.bottom;
+  }
+  return vp;
+ }
  return CompatFitViewport(rect.right, rect.bottom, logical_width, logical_height, stretch);
+}
+static CompatViewport CenterViewport(HWND window) {
+ CompatViewport vp = Viewport(window);
+ if (WideActive()) {
+  RECT rect; GetClientRect(window, &rect);
+  return CompatCentralViewport(vp, rect.bottom);
+ }
+ return vp;
+}
+static void SetViewport(const CompatViewport &vp) {
+ glViewport(vp.x, vp.y, vp.width, vp.height);
+ glScissor(vp.x, vp.y, vp.width, vp.height);
+}
+extern "C" double __stdcall CompatWorldAspect(double original_aspect) {
+ if (!game_window || !WideActive()) return original_aspect;
+ CompatViewport vp = Viewport(game_window);
+ SetViewport(vp);
+ return vp.height > 0 ? (double)vp.width / vp.height : original_aspect;
+}
+extern "C" double __stdcall CompatWorldMouseX(double original_ndc) {
+ if (!game_window || !WideActive()) return original_ndc;
+ CompatViewport vp = Viewport(game_window);
+ return vp.width > 0 ? original_ndc * (4.0 / 3.0) * vp.height / vp.width : original_ndc;
+}
+extern "C" void __stdcall CompatBeginOverlay(void) {
+ if (game_window && WideActive()) SetViewport(CenterViewport(game_window));
+}
+extern "C" void __stdcall CompatEndOverlay(void) {
+ if (game_window && WideActive()) SetViewport(Viewport(game_window));
+}
+static bool cursor_projection;
+extern "C" void __stdcall CompatBeginCursorOverlay(void) {
+ cursor_projection = game_window && WideActive();
+ if (!cursor_projection) return;
+ CompatViewport vp = Viewport(game_window);
+ double margin = vp.height > 0 ? ((double)vp.width * 768.0 / vp.height - 1024.0) * 0.5 : 0;
+ SetViewport(vp);
+ glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity();
+ glOrtho(-margin, 1024.0 + margin, 768.0, 0.0, -10000.0, 20000.0);
+ glMatrixMode(GL_MODELVIEW);
+}
+extern "C" void __stdcall CompatEndCursorOverlay(void) {
+ // Pair with Begin even if the cursor's script changed the scene meanwhile.
+ if (!cursor_projection) return;
+ cursor_projection = false;
+ glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW);
+ SetViewport(CenterViewport(game_window));
 }
 static void ToggleFullscreen() {
  if (!game_window || Exclusive()) return;
@@ -124,7 +249,8 @@ static LRESULT CALLBACK ModernWindowProc(HWND window, UINT message, WPARAM w, LP
  if (message >= WM_MOUSEMOVE && message <= WM_MBUTTONDBLCLK) {
   CompatViewport vp = Viewport(window);
   int x = (short)LOWORD(l), y = (short)HIWORD(l), lx, ly;
-  bool inside = CompatMapMouse(vp, x, y, logical_width, logical_height, &lx, &ly);
+  bool inside = WideActive() ? CompatMapWorldMouse(vp, CenterViewport(window), x, y, &lx, &ly)
+                            : CompatMapMouse(vp, x, y, logical_width, logical_height, &lx, &ly);
   if (!inside && message != WM_MOUSEMOVE) return 0;
   l = MAKELPARAM((short)lx, (short)ly);
  }

@@ -39,6 +39,17 @@ int __stdcall CompatPrepareGame(int *width, int *height);
 void __stdcall CompatGameCanvas(int *width, int *height);
 void __stdcall CompatGLViewport(int x, int y, int width, int height);
 void __stdcall CompatBeginFrame(void);
+/* Experimental world-only widescreen. The scene allowlist is supplied by the
+ * local outpaint mod; menus/minigames without an entry retain the 4:3 canvas. */
+void __stdcall CompatSceneChanged(const char *path);
+double __stdcall CompatWorldAspect(double original_aspect);
+double __stdcall CompatWorldMouseX(double original_ndc);
+void __stdcall CompatBeginOverlay(void);
+void __stdcall CompatEndOverlay(void);
+void __stdcall CompatBeginCursorOverlay(void);
+void __stdcall CompatEndCursorOverlay(void);
+/* Development validation only: gated scene entry on a hidden desktop. */
+const char *__stdcall CompatInitialScene(void);
 
 /* Test support (compat_replay.cpp): deterministic record/replay, run before the
  * program entry point; does nothing unless the replay setting is record/play. */

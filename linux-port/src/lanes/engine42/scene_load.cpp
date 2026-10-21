@@ -5,6 +5,9 @@
 // Scene XML loader: Scene::LoadScene (0x422510, tail 0x42280c) and ReadObjects (0x422d40).
 #include "lane_xml.h"
 #include "e42_scene.h"
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+#include "../../native/widescreen_hooks.h"
+#endif
 extern "C" char *__cdecl strcpy(char *, const char *);
 #pragma intrinsic(strcpy)
 
@@ -110,6 +113,9 @@ void Scene::LoadScene_00422510(ObservedString path) {
  }
  if (--document->refs < 1) document->Release(1);
  Log_00403650("Scene loaded");
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+ CompatSceneChanged(path);
+#endif
 }
 
 // Scene object components, constructed with their owner object.

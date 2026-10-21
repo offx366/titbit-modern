@@ -20,10 +20,14 @@ def main():
     p.add_argument('--data',required=True,type=Path)
     p.add_argument('--exe',type=Path,default=ROOT/'titbit' if (ROOT/'titbit').is_file() else ROOT/'build/titbit',
                    help='Native ELF to test (packaged executable or main build)')
+    p.add_argument('--widescreen',choices=('16:9','16:10'),help='Experimental horizontal scene expansion')
+    p.add_argument('--scene',help='Validation-only direct XML startup (not normal gameplay)')
+    p.add_argument('--scene-allowlist',type=Path,help='Newline list of scenes with generated wings')
     p.add_argument('--frames',type=int,default=50)
     p.add_argument('--timeout',type=int,default=60)
     p.add_argument('--actions',type=Path,help='Timed XTest key/click/capture actions on the private display')
     p.add_argument('--require-scene',action='append',default=[],help='Fail unless this XML scene was fully loaded; repeatable')
+    p.add_argument('--stop-after-actions',action='store_true',help='Request a clean engine-loop exit after the last scripted action')
     p.add_argument('--gdb',action='store_true')
     p.add_argument('--audio',choices=('dummy','disk'),default='dummy')
     p.add_argument('--out',type=Path,default=ROOT/'build/headless-probe')
@@ -33,8 +37,17 @@ def main():
                      SDL_AUDIODRIVER=a.audio,LIBGL_ALWAYS_SOFTWARE='1',
                      TITBIT_TEST_FRAMES=str(a.frames),TITBIT_SCREENSHOT_DIR=str(a.out),
                      TITBIT_SCREENSHOT_FRAMES=','.join(map(str,sorted({1,min(20,a.frames),a.frames}))))
+    if a.scene:
+        environment['TITBIT_WIDESCREEN_VALIDATION']='1'
+    if a.scene_allowlist:
+        environment['TITBIT_WIDESCREEN_SCENES']=str(a.scene_allowlist.resolve())
     if a.audio=='disk':
         environment.update(SDL_DISKAUDIOFILE=str(a.out/'game.pcm'),SDL_DISKAUDIODELAY='10')
+    stop_file=a.out/'test-stop.request'
+    stop_file.unlink(missing_ok=True)
+    if a.stop_after_actions:
+        if not a.actions:p.error('--stop-after-actions requires --actions')
+        environment['TITBIT_TEST_STOP_FILE']=str(stop_file)
     for path in a.out.glob('frame-*'):path.unlink()
     with (a.out/'xvfb.log').open('w') as errors:
         # WSLg mounts its filesystem socket directory read-only. Fixed display
@@ -46,7 +59,7 @@ def main():
                 try:connection.connect('\0/tmp/.X11-unix/X'+str(candidate));continue
                 except OSError:pass
             if Path('/tmp/.X'+str(candidate)+'-lock').exists():continue
-            display=subprocess.Popen(['Xvfb',':'+str(candidate),'-nolisten','tcp','-screen','0','1024x768x24'],
+            display=subprocess.Popen(['Xvfb',':'+str(candidate),'-nolisten','tcp','-screen','0',('1366x768x24' if a.widescreen=='16:9' else '1230x768x24' if a.widescreen else '1024x768x24')],
                                      stdout=errors,stderr=errors,text=True)
             deadline=time.monotonic()+5
             ready=False
@@ -67,6 +80,8 @@ def main():
             scenes=[];loading_scene=None;current_scene=None;scene_ready=0;partial=''
             with (a.out/'game.log').open('w') as log:
                 command=[str(executable),'--data',str(data)]
+                if a.widescreen:command+=['--windowed','--widescreen='+a.widescreen]
+                if a.scene:command+=['--validate-scene',a.scene]
                 if a.gdb:command=['gdb','--batch','-q','-ex','set pagination off','-ex','run',
                                  '-ex','thread apply all bt','-ex','info registers',
                                  # GDB's diagnostic commands fail after a normal exit.
@@ -92,6 +107,7 @@ def main():
                         if exc.errno not in (errno.ENODATA,errno.EAGAIN):raise
                     lines=partial.split('\n');partial=lines.pop()
                     for line in lines:
+                        line=line.strip()
                         if line.startswith('Start loading ') and line.strip().lower().endswith('.xml'):
                             loading_scene=line[len('Start loading '):].strip();current_scene=None
                         elif line.strip()=='Scene loaded' and loading_scene:
@@ -118,15 +134,24 @@ def main():
                             ImageGrab.grab(xdisplay=environment['DISPLAY']).save(a.out/(action['name']+'.png'))
                         else:raise ValueError('Unknown action type: '+kind)
                         performed.append(index)
+                    if a.stop_after_actions and len(performed)==len(actions):stop_file.touch(exist_ok=True)
                     time.sleep(.05)
                 scene_log.close()
                 code=process.poll()
                 if code is None:
                     os.killpg(process.pid,signal.SIGTERM);process.wait(timeout=10);code='timeout'
             text=(a.out/'game.log').read_text(errors='replace')
+            scenes=[];loading_scene=None
+            for line in text.splitlines():
+                if line.startswith('Start loading ') and line.strip().lower().endswith('.xml'):
+                    loading_scene=line[len('Start loading '):].strip()
+                elif line.strip()=='Scene loaded' and loading_scene:
+                    scenes.append(loading_scene);loading_scene=None
             images=[json.loads(path.read_text()) for path in sorted(a.out.glob('frame-*.json'))]
             report={'executableSha256':hashlib.sha256(executable.read_bytes()).hexdigest(),
-                    'display':environment['DISPLAY'],'videoDriver':'x11','privateXvfb':True,
+                    'display':environment['DISPLAY'],'videoDriver':'x11','privateXvfb':True,'widescreen':a.widescreen,'validationScene':a.scene,
+                    'stoppedAfterActions':a.stop_after_actions and stop_file.exists(),
+                    'worldExpanded':bool(a.scene and 'Widescreen scene '+a.scene+': world enabled' in text),
                     'seconds':round(time.monotonic()-start,2),'exitCode':code,'framesRequested':a.frames,
                     'images':images,'log':str(a.out/'game.log')}
             report['actionsPerformed']=[actions[index] for index in performed]

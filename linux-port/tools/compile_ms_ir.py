@@ -127,7 +127,7 @@ def main():
     sdk = args.vc98.resolve() if args.vc98 else None
     if sdk and not (sdk/'Include').is_dir():
         parser.error('--vc98 must point to an installed VC98 directory')
-    out = (args.out or ROOT/('build/ms-runtime-ir' if args.runtime_only else 'build/ms-ir')).resolve()
+    out = (args.out or Path(os.environ.get('TITBIT_BUILD_DIR', ROOT/'build'))/('ms-runtime-ir' if args.runtime_only else 'ms-ir')).resolve()
     out.mkdir(parents=True, exist_ok=True)
     compiler = shutil.which(args.compiler)
     if not compiler:
@@ -142,7 +142,7 @@ def main():
     recipes += [{'source': source, 'cwd': '.', 'includes': [], 'flags': []} for source in args.extra_source]
     recipes = [row for row in recipes if args.filter in row['source']]
     base = [compiler, '-target', 'i386-pc-windows-msvc', '-fms-extensions', '-fms-compatibility',
-            '-fms-compatibility-version=12.0', '-fdeclspec', '-DTITBIT_SOURCE_LINK',
+            '-fms-compatibility-version=12.0', '-fdeclspec', '-DTITBIT_SOURCE_LINK', '-DTITBIT_WIDESCREEN_HOOKS',
             '-O2', '-fno-strict-aliasing', '-fno-omit-frame-pointer', '-fdelayed-template-parsing',
             '-ffunction-sections', '-fdata-sections', '-ferror-limit=16',
             '-Wno-ignored-attributes', '-Wno-pragma-pack', '-Wno-microsoft-cast']
@@ -219,7 +219,7 @@ extern "C" long __stdcall DirectInputCreateA(void *instance, unsigned version, v
             result.update(exitCode=run.returncode, errors=errors)
             if run.returncode == 0:
                 temporary_ir.replace(ir)
-                result.update(status='compiled', ir=str(ir.relative_to(ROOT)), sha256=hashlib.sha256(ir.read_bytes()).hexdigest())
+                result.update(status='compiled', ir=str(ir.resolve()), sha256=hashlib.sha256(ir.read_bytes()).hexdigest())
             else:
                 temporary_ir.unlink(missing_ok=True)
                 match = re.search(r"fatal error: '([^']+)' file not found", '\n'.join(errors))

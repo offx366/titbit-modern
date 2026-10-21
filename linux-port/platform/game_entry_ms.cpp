@@ -15,6 +15,8 @@ int tb_linux_poll();
 void tb_linux_report(unsigned frames);
 unsigned tb_linux_frame_limit();
 int tb_linux_has_assets();
+int tb_linux_test_stop();
+const char *tb_linux_start_scene();
 }
 extern bool gameActive;
 extern int displayWidth, displayHeight;
@@ -32,13 +34,13 @@ extern "C" int titbit_linux_run() {
     scAdd_External_Symbol((char *)"ShellExecute", (void *)&ShellExecuteScriptRegistrationTarget);
     SetArchiveRoot("./");
     if (!MountArchive("QUEST.EZD")) return 5;
-    picking_scene.Load(ObservedString("startup.XML"));
+    picking_scene.Load(ObservedString(tb_linux_start_scene()));
     unsigned frames = 0, limit = tb_linux_frame_limit();
     while (tb_linux_poll()) {
         if (gameActive) {
             RunGameFrame();
             ++frames;
-            if (limit && frames >= limit) break;
+            if ((limit && frames >= limit) || tb_linux_test_stop()) break;
         }
     }
     tb_linux_report(frames);

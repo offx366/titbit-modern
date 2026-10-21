@@ -5,6 +5,7 @@ This stage consumes source-generated LLVM IR, translates Windows funclet EH to
 DWARF, and generates ELF directly with Clang. No Windows SDK is needed.
 """
 import argparse
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
@@ -26,8 +27,8 @@ def sha(data):return hashlib.sha256(data).hexdigest()
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--ir',type=Path,default=ROOT/'build/ms-ir')
-    p.add_argument('--out',type=Path,default=ROOT/'build/ms-elf')
+    p.add_argument('--ir',type=Path,default=Path(os.environ.get('TITBIT_BUILD_DIR', ROOT/'build'))/'ms-ir')
+    p.add_argument('--out',type=Path,default=Path(os.environ.get('TITBIT_BUILD_DIR', ROOT/'build'))/'ms-elf')
     p.add_argument('--jobs',type=int,default=4)
     p.add_argument('--filter',default='')
     p.add_argument('--compiler',default='clang++-18')

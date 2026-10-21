@@ -6,6 +6,9 @@
 // script entry points (0x420200, 0x423e40-0x425fd0).
 #include "lane_xml.h"
 #include "e42_scene.h"
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+#include "../../native/widescreen_hooks.h"
+#endif
 extern "C" {
  __declspec(dllimport) void __stdcall glMatrixMode(unsigned);
  __declspec(dllimport) void __stdcall glOrtho(double, double, double, double, double, double);
@@ -113,6 +116,9 @@ void Scene::ReadCamera_00423f80(DomNode42 *node) {
 // Interface objects in a 1024x768 orthographic pass, back to front.
 // NONMATCHING: faithful translation
 void Scene::DrawOverlay_00424a30() {
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+ CompatBeginOverlay();
+#endif
  glPushMatrix();
  glLoadIdentity();
  glMatrixMode(0x1701);                               // GL_PROJECTION
@@ -130,12 +136,27 @@ void Scene::DrawOverlay_00424a30() {
   SceneMesh *mesh = window->mesh;
   // written as the original's skip tests (NaN coordinates still draw)
   if (!mesh) continue;
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+  bool cursor = window == pointNode;
+  // The cursor follows the world mouse into the extended side fields. Every
+  // other interface object retains the original horizontal canvas bounds.
+  if (!cursor) {
+#endif
   if (mesh->ox + mesh->x + mesh->width < 0.0f) continue;
   if (mesh->ox + mesh->x - mesh->width > 1024.0f) continue;
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+  }
+#endif
   if (mesh->y + mesh->height + mesh->oy < 0.0f) continue;
   if (mesh->y + mesh->oy - mesh->height > 768.0f) continue;
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+  if (cursor) CompatBeginCursorOverlay();
+#endif
   window->Update(g_005026bc);
   window->Render(g_005026bc);
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+  if (cursor) CompatEndCursorOverlay();
+#endif
  }
  glDisable(0xde1);
  glDisable(0xbc0);
@@ -146,6 +167,9 @@ void Scene::DrawOverlay_00424a30() {
  glPopMatrix();
  glMatrixMode(0x1700);
  glPopMatrix();
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+ CompatEndOverlay();
+#endif
 }
 
 

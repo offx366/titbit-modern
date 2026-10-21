@@ -11,7 +11,7 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--out',type=Path,default=ROOT/'build/native')
+    p.add_argument('--out',type=Path,default=Path(os.environ.get('TITBIT_BUILD_DIR', ROOT/'build'))/'native')
     a=p.parse_args();a.out.mkdir(parents=True,exist_ok=True)
     packages=['sdl2','libavformat','libavcodec','libswscale','libswresample']
     prefix=os.environ.get('TITBIT_FFMPEG'); sdl=os.environ.get('TITBIT_SDL2')

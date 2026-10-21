@@ -20,4 +20,22 @@ inline bool CompatMapMouse(const CompatViewport &vp, int x, int y, int logical_w
  *ly = (y - vp.top) * logical_h / vp.height;
  return true;
 }
+/* Horizontal-plus projection: vertical coordinates and the original canvas
+ * scale remain identical. A wide viewport's middle is the original UI canvas. */
+inline CompatViewport CompatCentralViewport(const CompatViewport &wide, int window_height) {
+ CompatViewport center = wide;
+ center.width = wide.height * 4 / 3;
+ if (center.width > wide.width) center.width = wide.width;
+ center.x = wide.x + (wide.width - center.width) / 2;
+ center.top = window_height - center.y - center.height;
+ return center;
+}
+inline bool CompatMapWorldMouse(const CompatViewport &wide, const CompatViewport &center,
+                               int x, int y, int *lx, int *ly) {
+ if (center.width <= 0 || center.height <= 0 || x < wide.x || x >= wide.x + wide.width ||
+     y < wide.top || y >= wide.top + wide.height) { *lx = *ly = -1; return false; }
+ *lx = (x - center.x) * 1024 / center.width;
+ *ly = (y - center.top) * 768 / center.height;
+ return true;
+}
 #endif

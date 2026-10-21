@@ -4,6 +4,9 @@
  * All 28 helper calls preserve evidenced ABI; classes are authored layout
  * views, not original source names or complete native global-storage types.
  * Camera/zoom/Scene remain explicit unbuilt runtime inputs. */
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+#include "widescreen_hooks.h"
+#endif
 struct Vec {float x,y,z;Vec& Init3(float,float,float);Vec& Assign(const Vec&);};
 struct CopyVec:Vec {CopyVec(const CopyVec&);};
 struct M {float v[16];Vec *Origin(Vec*)const;};extern M camera;extern float zoom;
@@ -13,6 +16,9 @@ void Picking::Pick(int x,int y){
  Vec screen={(float)(x-left)*1024/(right-left),(float)(bottom-y)*768/(bottom-top),0};scene.SetPoint(screen);Build();
  Vec ax={1,0,0},ay={0,1,0},az={0,0,1};
  float w=right-left;float nx=(float)x-left-w*0.5f;nx=(nx+nx)/w;
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+ nx=(float)CompatWorldMouseX(nx);
+#endif
  float h=bottom-top;float ny=(float)y-top-h*0.5f;ny=(ny+ny)/h;
  Vec n0={planes[0][0],planes[0][1],planes[0][2]};
  Vec n2={planes[2][0],planes[2][1],planes[2][2]};

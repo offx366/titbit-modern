@@ -226,7 +226,8 @@ def main(default_compat=True):
             cachepath.write_text(json.dumps(cache),encoding='utf-8')
         shutil.copy2(raw,obj)
         compiled.append({**row,'object':str(obj),'command':command,'sourceSha256':digest(src),
-                         'actualSource':actual.relative_to(BASE).as_posix(),'actualSourceSha256':digest(actual),
+                         'actualSource':(actual.relative_to(BASE) if actual.is_relative_to(BASE) else actual).as_posix(),
+                         'actualSourceSha256':digest(actual),
                          'objectSha256':digest(obj)})
         if (number+1)%25==0:print('compiled',number+1,'/',len(units),flush=True)
     compiled=[r for r in compiled if not r['source'].endswith('/00498de0-dinput_thunk.asm')]

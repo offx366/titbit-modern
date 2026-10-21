@@ -12,6 +12,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+BUILD = Path(os.environ.get('TITBIT_BUILD_DIR', ROOT/'build')).resolve()
 
 
 def encode(name):
@@ -21,8 +22,8 @@ def encode(name):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--vc98', type=Path, help='Optional legacy-header comparison build')
-    parser.add_argument('--native', type=Path, default=ROOT/'build/native')
-    parser.add_argument('--out', type=Path, default=ROOT/'build/cpp-runtime-test')
+    parser.add_argument('--native', type=Path, default=BUILD/'native')
+    parser.add_argument('--out', type=Path, default=BUILD/'cpp-runtime-test')
     args = parser.parse_args()
     out = args.out.resolve()
     native = args.native.resolve()
@@ -74,7 +75,11 @@ def main():
     (out/'link.log').write_text(built.stdout+built.stderr)
     if built.returncode:
         raise RuntimeError(built.stdout+built.stderr)
-    run = subprocess.run([str(out/'smoke')], cwd=ROOT, capture_output=True, text=True, timeout=20)
+    # The shared smoke fixture writes relative build/* files. Keep those writes
+    # inside this test output even for a clean checkout or --build-dir build.
+    work = out/'work'
+    (work/'build').mkdir(parents=True, exist_ok=True)
+    run = subprocess.run([str(out/'smoke')], cwd=work, capture_output=True, text=True, timeout=20)
     result = {'ok': run.returncode == 0, 'exitCode': run.returncode, 'stdout': run.stdout, 'stderr': run.stderr,
               'coverage': ['legacy copy-on-write strings' if args.vc98 else 'portable string/container ownership and fixed layouts', 'string replacement', 'typed exceptions',
                            'exception copying', 'unwind observer', 'C locale facets',

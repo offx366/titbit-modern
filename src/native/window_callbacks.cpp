@@ -25,7 +25,16 @@ extern "C" LRESULT __stdcall GameWindowProc(HWND window,unsigned message,WPARAM 
  case 5:return 0;
  case 0x101:keyStates[wparam]=0;return 0;
  case 0x112:switch(wparam){case 0xf140:case 0xf170:return 0;}break;
- case 0x200:pickingControl.mouse_x=lparam&0xffff;pickingControl.mouse_y=gameRect.bottom-(lparam>>16)-gameRect.top;return 0;
+ case 0x200:
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+  // Win32 mouse coordinates are signed 16-bit values. Wide-world positions
+  // left of the central UI canvas are negative, not coordinates near 65535.
+  pickingControl.mouse_x=(short)(lparam&0xffff);
+  pickingControl.mouse_y=gameRect.bottom-(short)(lparam>>16)-gameRect.top;
+#else
+  pickingControl.mouse_x=lparam&0xffff;pickingControl.mouse_y=gameRect.bottom-(lparam>>16)-gameRect.top;
+#endif
+  return 0;
  case 0x201:pickingControl.Click(8);return 0;
  case 0x202:pickingControl.Click(9);return 0;
  case 0x204:pickingControl.Key(2);return 0;

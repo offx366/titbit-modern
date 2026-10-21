@@ -66,7 +66,11 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR command,int show)
   scAdd_External_Symbol("ShellExecute",(void*)&ShellExecuteScriptRegistrationTarget);
   SetArchiveRoot(".\\");
   MountArchive("QUEST.EZD");
+#ifdef TITBIT_COMPAT
+  picking_scene.Load(ObservedString(CompatInitialScene()));
+#else
   picking_scene.Load(ObservedString("startup.XML"));
+#endif
   MSG message;
   for(;;) {
    if(PeekMessageA(&message,0,0,0,PM_REMOVE)) {

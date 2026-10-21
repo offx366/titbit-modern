@@ -18,9 +18,72 @@
 #include <math.h>
 
 struct TBWindow { SDL_Window *window; SDL_GLContext context; struct TBWindow *next;
- int logical_width,logical_height,presentation,viewport[4];int64_t relative_x,relative_y;
+ int logical_width,logical_height,presentation,presentation_width,viewport[4];int64_t relative_x,relative_y;
 };
 static TBWindow *windows;
+static int widescreen_scene, widescreen_world, widescreen_overlay_depth;
+static int overlay_scissor[4], overlay_scissor_enabled;
+static int cursor_overlay_depth, cursor_scissor[4], cursor_matrix_mode;
+static int widescreen_width(void) {
+ const char *value=getenv("TITBIT_WIDESCREEN");
+ return value && !strcmp(value,"16:9") ? 1366 : value && !strcmp(value,"16:10") ? 1230 : 1024;
+}
+static int is_widescreen_scene(const char *name) {
+ const char *path=getenv("TITBIT_WIDESCREEN_SCENES");
+ if(!path || !*path)path="widescreen-scenes.txt";
+ FILE *file=fopen(path,"r");if(!file)return 0;
+ char line[512];int found=0;
+ while(fgets(line,sizeof(line),file)) {
+  size_t size=strcspn(line,"\r\n");line[size]=0;
+  if(!strcasecmp(name,line)){found=1;break;}
+ }
+ fclose(file);return found;
+}
+#if defined(__i386__)
+#define WIDE_API __attribute__((stdcall))
+#else
+#define WIDE_API
+#endif
+static void apply_viewport(void);
+void WIDE_API CompatSceneChanged(const char *name) {
+ widescreen_scene=widescreen_width()>1024 && is_widescreen_scene(name);
+ widescreen_world=0;
+ fprintf(stderr,"Widescreen scene %s: %s\n",name,widescreen_scene?"world enabled":"central canvas");
+ apply_viewport();
+}
+double WIDE_API CompatWorldAspect(double original) {
+ widescreen_world=widescreen_scene;widescreen_overlay_depth=0;apply_viewport();
+ return widescreen_world ? widescreen_width()/768.0 : original;
+}
+void WIDE_API CompatBeginOverlay(void) {
+ if(!widescreen_scene)return;
+ if(!widescreen_overlay_depth){overlay_scissor_enabled=glIsEnabled(GL_SCISSOR_TEST);glGetIntegerv(GL_SCISSOR_BOX,overlay_scissor);}
+ ++widescreen_overlay_depth;apply_viewport();
+ int viewport[4];glGetIntegerv(GL_VIEWPORT,viewport);glEnable(GL_SCISSOR_TEST);glScissor(viewport[0],viewport[1],viewport[2],viewport[3]);
+}
+void WIDE_API CompatEndOverlay(void) {
+ if(!widescreen_overlay_depth)return;
+ --widescreen_overlay_depth;
+ if(!widescreen_overlay_depth){glScissor(overlay_scissor[0],overlay_scissor[1],overlay_scissor[2],overlay_scissor[3]);if(!overlay_scissor_enabled)glDisable(GL_SCISSOR_TEST);}
+ apply_viewport();
+}
+void WIDE_API CompatBeginCursorOverlay(void) {
+ if(!widescreen_scene)return;
+ if(cursor_overlay_depth++){return;}
+ glGetIntegerv(GL_SCISSOR_BOX,cursor_scissor);glGetIntegerv(GL_MATRIX_MODE,&cursor_matrix_mode);
+ apply_viewport();int vp[4];glGetIntegerv(GL_VIEWPORT,vp);glScissor(vp[0],vp[1],vp[2],vp[3]);
+ double margin=(widescreen_width()-1024)*0.5;
+ glMatrixMode(GL_PROJECTION);glPushMatrix();glLoadIdentity();glOrtho(-margin,1024+margin,768,0,-10000,20000);glMatrixMode(GL_MODELVIEW);
+}
+void WIDE_API CompatEndCursorOverlay(void) {
+ if(!cursor_overlay_depth)return;
+ if(--cursor_overlay_depth)return;
+ glMatrixMode(GL_PROJECTION);glPopMatrix();glMatrixMode(cursor_matrix_mode);
+ apply_viewport();glScissor(cursor_scissor[0],cursor_scissor[1],cursor_scissor[2],cursor_scissor[3]);
+}
+double WIDE_API CompatWorldMouseX(double original) {
+ return widescreen_scene ? original*(1024.0/widescreen_width()) : original;
+}
 static TBWindow *event_window(uint32_t id) {
  SDL_Window *native=id?SDL_GetWindowFromID(id):SDL_GL_GetCurrentWindow();
  for(TBWindow *w=windows;w;w=w->next)if(w->window==native)return w;
@@ -29,7 +92,11 @@ static TBWindow *event_window(uint32_t id) {
 static void apply_viewport(void) {
  TBWindow *w=event_window(0);if(!w||!SDL_GL_GetCurrentContext())return;
  int width,height;SDL_GL_GetDrawableSize(w->window,&width,&height);
- TBViewport vp=tb_fit_viewport(width,height,w->logical_width,w->logical_height);
+ TBViewport vp=tb_fit_viewport(width,height,w->presentation_width,w->logical_height);
+ if(w->presentation_width>w->logical_width && !(widescreen_world&&(!widescreen_overlay_depth||cursor_overlay_depth))) {
+  int central=(int64_t)vp.width*w->logical_width/w->presentation_width;
+  vp.x+=(vp.width-central)/2;vp.width=central;
+ }
  if(vp.width<=0||vp.height<=0)return;
  int *v=w->viewport;
  glViewport(vp.x+(int64_t)v[0]*vp.width/w->logical_width,vp.y+(int64_t)v[1]*vp.height/w->logical_height,
@@ -39,9 +106,14 @@ void tb_gl_viewport(int x,int y,int width,int height) {
  TBWindow *w=event_window(0);if(!w){glViewport(x,y,width,height);return;}
  w->viewport[0]=x;w->viewport[1]=y;w->viewport[2]=width;w->viewport[3]=height;apply_viewport();
 }
-static TBViewport mouse_viewport(TBWindow *w) {
+static TBViewport world_mouse_viewport(TBWindow *w) {
  int width,height;SDL_GetWindowSize(w->window,&width,&height);
- return tb_fit_viewport(width,height,w->logical_width,w->logical_height);
+ return tb_fit_viewport(width,height,w->presentation_width,w->logical_height);
+}
+static TBViewport mouse_viewport(TBWindow *w) {
+ TBViewport vp=world_mouse_viewport(w);
+ int central=(int64_t)vp.width*w->logical_width/w->presentation_width;
+ vp.x+=(vp.width-central)/2;vp.width=central;return vp;
 }
 struct AudioItem { TBWaveHeader *header; unsigned offset; struct AudioItem *next; };
 struct TBAudio { SDL_AudioDeviceID device; SDL_AudioSpec spec; struct AudioItem *first,*last; unsigned volume;
@@ -74,10 +146,11 @@ TBWindow *tb_window_create(const char *title,int width,int height,int fullscreen
  if(!tb_init())return NULL;
  w=calloc(1,sizeof(*w));if(!w)return NULL;
  w->logical_width=width;w->logical_height=height;w->presentation=fullscreen;
+ w->presentation_width=(fullscreen&&width==1024&&height==768)?widescreen_width():width;
  w->viewport[2]=width;w->viewport[3]=height;
  const char *preference=getenv("TITBIT_FULLSCREEN");
  int start_fullscreen=fullscreen&&(!preference||strcmp(preference,"0"));
- w->window=SDL_CreateWindow(title,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,width,height,
+ w->window=SDL_CreateWindow(title,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,w->presentation_width,height,
  SDL_WINDOW_OPENGL|SDL_WINDOW_HIDDEN|SDL_WINDOW_ALLOW_HIGHDPI|
  (fullscreen?SDL_WINDOW_RESIZABLE:0)|(start_fullscreen?SDL_WINDOW_FULLSCREEN_DESKTOP:0));
  if(!w->window){free(w);return NULL;}w->next=windows;windows=w;return w;
@@ -181,7 +254,9 @@ int tb_poll_event(TBEvent *out) {
    out->lparam=(intptr_t)(1u|((sc&0xff)<<16)|(down?(e.key.repeat?0x40000000u:0):0xc0000000u));return 1;}
   if(e.type==SDL_MOUSEMOTION){TBWindow *w=event_window(e.motion.windowID);
    if(w&&w->presentation){TBViewport vp=mouse_viewport(w);int x,y;
-    tb_map_mouse(vp,e.motion.x,e.motion.y,w->logical_width,w->logical_height,&x,&y);e.motion.x=x;e.motion.y=y;
+    if(widescreen_scene)tb_map_world_mouse(vp,world_mouse_viewport(w),e.motion.x,e.motion.y,w->logical_width,w->logical_height,&x,&y);
+    else tb_map_mouse(vp,e.motion.x,e.motion.y,w->logical_width,w->logical_height,&x,&y);
+    e.motion.x=x;e.motion.y=y;
     if(vp.width>0&&vp.height>0){w->relative_x+=(int64_t)e.motion.xrel*w->logical_width;w->relative_y+=(int64_t)e.motion.yrel*w->logical_height;
      e.motion.xrel=w->relative_x/vp.width;e.motion.yrel=w->relative_y/vp.height;w->relative_x%=vp.width;w->relative_y%=vp.height;}
    }
@@ -189,7 +264,9 @@ int tb_poll_event(TBEvent *out) {
    out->message=0x200;out->x=e.motion.x;out->y=e.motion.y;out->lparam=(e.motion.x&65535)|((e.motion.y&65535)<<16);return 1;}
   if(e.type==SDL_MOUSEBUTTONDOWN||e.type==SDL_MOUSEBUTTONUP){unsigned button=e.button.button;int down=e.type==SDL_MOUSEBUTTONDOWN;
    TBWindow *w=event_window(e.button.windowID);if(w&&w->presentation){int x,y;
-    int inside=tb_map_mouse(mouse_viewport(w),e.button.x,e.button.y,w->logical_width,w->logical_height,&x,&y);
+    TBViewport vp=mouse_viewport(w);
+    int inside=widescreen_scene ? tb_map_world_mouse(vp,world_mouse_viewport(w),e.button.x,e.button.y,w->logical_width,w->logical_height,&x,&y)
+                               : tb_map_mouse(vp,e.button.x,e.button.y,w->logical_width,w->logical_height,&x,&y);
     if(!inside&&down)continue;e.button.x=x;e.button.y=y;
    }
    if(button==SDL_BUTTON_LEFT)input_state.buttons[0]=down?0x80:0;

@@ -105,9 +105,9 @@ def media_libs():
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--objects',type=Path,default=ROOT/'build/ms-elf/report.json')
-    p.add_argument('--native',type=Path,default=ROOT/'build/native')
-    p.add_argument('--out',type=Path,default=ROOT/'build/titbit')
+    p.add_argument('--objects',type=Path,default=Path(os.environ.get('TITBIT_BUILD_DIR', ROOT/'build'))/'ms-elf/report.json')
+    p.add_argument('--native',type=Path,default=Path(os.environ.get('TITBIT_BUILD_DIR', ROOT/'build'))/'native')
+    p.add_argument('--out',type=Path,default=Path(os.environ.get('TITBIT_BUILD_DIR', ROOT/'build'))/'titbit')
     p.add_argument('--link',action='store_true')
     a=p.parse_args()
     config=json.loads((ROOT/'config/source-build.json').read_text())
@@ -118,7 +118,7 @@ def main():
     saved=ROOT/'config/source-aliases.json'
     global_aliases.update(json.loads(saved.read_text(encoding='utf-8-sig')))
     rows=json.loads(a.objects.read_text())['rows']
-    runtime_report=ROOT/'build/ms-runtime-elf/report.json'
+    runtime_report=Path(os.environ.get('TITBIT_BUILD_DIR', ROOT/'build'))/'ms-runtime-elf/report.json'
     if runtime_report.exists():
         present={r['source'] for r in rows}
         rows += [r for r in json.loads(runtime_report.read_text())['rows'] if r['source'] not in present]
@@ -129,7 +129,7 @@ def main():
     for path in sorted(a.native.glob('*.o')):
         defs,undef=nm(path)
         rows.append(dict(source=str(path),object=str(path),definitions=defs,undefined=undef,native=True))
-    helpers=ROOT/'build/ms-runtime-elf/objects/vc6_native_helpers.o'
+    helpers=Path(os.environ.get('TITBIT_BUILD_DIR', ROOT/'build'))/'ms-runtime-elf/objects/vc6_native_helpers.o'
     if helpers.exists():
         defs,undef=nm(helpers)
         rows.append(dict(source=str(helpers),object=str(helpers),definitions=defs,undefined=undef,native=True))
