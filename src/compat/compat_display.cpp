@@ -18,6 +18,7 @@ static bool exclusive_checked, exclusive;
 static bool wide_scene;
 static unsigned overlay_depth;
 static bool cursor_projection;
+static bool inventory_projection;
 static bool WideRequested() {
  static int configured = -1;
  if (configured < 0) configured = CompatSettingIs("aspect", "fit", "widescreen");
@@ -206,7 +207,7 @@ extern "C" void __stdcall CompatEndOverlay(void) {
 }
 extern "C" int __stdcall CompatBeginFullscreenEffect(float x, float y, float width, float height,
                                                      float uv_width, float uv_height) {
- if (!game_window || !WideActive() || !overlay_depth || cursor_projection) return 0;
+ if (!game_window || !WideActive() || !overlay_depth || cursor_projection || inventory_projection) return 0;
  float matrix[16]; glGetFloatv(GL_MODELVIEW_MATRIX, matrix);
  if (!CompatIsFullscreenEffect(matrix,x,y,width,height,uv_width,uv_height)) return 0;
  // Keep the original 1024x768 orthographic coordinates, but span the world
@@ -231,6 +232,29 @@ extern "C" void __stdcall CompatEndCursorOverlay(void) {
  // Pair with Begin even if the cursor's script changed the scene meanwhile.
  if (!cursor_projection) return;
  cursor_projection = false;
+ glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW);
+ SetViewport(CenterViewport(game_window));
+}
+extern "C" float __stdcall CompatOverlayMouseX(const char *name, float central_x) {
+ if (!game_window || !WideActive() || !name || lstrcmpA(name,"items") != 0) return central_x;
+ CompatViewport vp = Viewport(game_window);
+ return vp.height > 0 ? central_x + (float)(((double)vp.width * 768.0 / vp.height - 1024.0) * 0.5) : central_x;
+}
+extern "C" void __stdcall CompatBeginInventoryOverlay(void) {
+ inventory_projection = game_window && WideActive();
+ if (!inventory_projection) return;
+ CompatViewport vp = Viewport(game_window);
+ double width = vp.height > 0 ? (double)vp.width * 768.0 / vp.height : 1024.0;
+ SetViewport(vp);
+ glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity();
+ // Script x=-64..0 still closes/opens the panel. Its root and all children,
+ // including tooltips, now use the real left edge at the original pixel scale.
+ glOrtho(0.0, width, 768.0, 0.0, -10000.0, 20000.0);
+ glMatrixMode(GL_MODELVIEW);
+}
+extern "C" void __stdcall CompatEndInventoryOverlay(void) {
+ if (!inventory_projection) return;
+ inventory_projection = false;
  glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW);
  SetViewport(CenterViewport(game_window));
 }

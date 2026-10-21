@@ -25,6 +25,7 @@ static TBWindow *windows;
 static int widescreen_scene, widescreen_world, widescreen_overlay_depth;
 static int overlay_scissor[4], overlay_scissor_enabled;
 static int cursor_overlay_depth, cursor_scissor[4], cursor_matrix_mode;
+static int inventory_overlay_depth, inventory_scissor[4], inventory_matrix_mode, inventory_scissor_enabled;
 static int effect_overlay_depth, effect_scissor[4], effect_scissor_enabled;
 static int widescreen_width(void) {
  const char *value=getenv("TITBIT_WIDESCREEN");
@@ -54,6 +55,14 @@ void WIDE_API CompatSceneChanged(const char *name) {
  apply_viewport();
 }
 double WIDE_API CompatWorldAspect(double original) {
+ /* Wide scenes and their central-only menus share the drawable. Match the
+  * Windows compat frame boundary: repaint exposed side bars after scene/size
+  * changes instead of retaining the previous frame's world or cursor pixels. */
+ if(widescreen_width()>1024 && SDL_GL_GetCurrentContext()) {
+  glPushAttrib(GL_COLOR_BUFFER_BIT|GL_SCISSOR_BIT|GL_DEPTH_BUFFER_BIT);
+  glDisable(GL_SCISSOR_TEST);glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);glDepthMask(GL_TRUE);
+  glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);glPopAttrib();
+ }
  widescreen_world=widescreen_scene;widescreen_overlay_depth=0;apply_viewport();
  return widescreen_world ? widescreen_width()/768.0 : original;
 }
@@ -83,8 +92,25 @@ void WIDE_API CompatEndCursorOverlay(void) {
  glMatrixMode(GL_PROJECTION);glPopMatrix();glMatrixMode(cursor_matrix_mode);
  apply_viewport();glScissor(cursor_scissor[0],cursor_scissor[1],cursor_scissor[2],cursor_scissor[3]);
 }
+float WIDE_API CompatOverlayMouseX(const char *name,float original) {
+ return widescreen_scene && name && !strcmp(name,"items") ? original+(widescreen_width()-1024)*0.5f : original;
+}
+void WIDE_API CompatBeginInventoryOverlay(void) {
+ if(!widescreen_scene)return;
+ if(inventory_overlay_depth++)return;
+ inventory_scissor_enabled=glIsEnabled(GL_SCISSOR_TEST);
+ glGetIntegerv(GL_SCISSOR_BOX,inventory_scissor);glGetIntegerv(GL_MATRIX_MODE,&inventory_matrix_mode);
+ apply_viewport();int vp[4];glGetIntegerv(GL_VIEWPORT,vp);glEnable(GL_SCISSOR_TEST);glScissor(vp[0],vp[1],vp[2],vp[3]);
+ glMatrixMode(GL_PROJECTION);glPushMatrix();glLoadIdentity();glOrtho(0,widescreen_width(),768,0,-10000,20000);glMatrixMode(GL_MODELVIEW);
+}
+void WIDE_API CompatEndInventoryOverlay(void) {
+ if(!inventory_overlay_depth || --inventory_overlay_depth)return;
+ glMatrixMode(GL_PROJECTION);glPopMatrix();glMatrixMode(inventory_matrix_mode);
+ apply_viewport();glScissor(inventory_scissor[0],inventory_scissor[1],inventory_scissor[2],inventory_scissor[3]);
+ if(inventory_scissor_enabled)glEnable(GL_SCISSOR_TEST);else glDisable(GL_SCISSOR_TEST);
+}
 int WIDE_API CompatBeginFullscreenEffect(float x,float y,float width,float height,float du,float dv) {
- if(!widescreen_scene || !widescreen_world || !widescreen_overlay_depth || cursor_overlay_depth || effect_overlay_depth)return 0;
+ if(!widescreen_scene || !widescreen_world || !widescreen_overlay_depth || cursor_overlay_depth || inventory_overlay_depth || effect_overlay_depth)return 0;
  float matrix[16];glGetFloatv(GL_MODELVIEW_MATRIX,matrix);
  if(!CompatIsFullscreenEffect(matrix,x,y,width,height,du,dv))return 0;
  glGetIntegerv(GL_SCISSOR_BOX,effect_scissor);effect_scissor_enabled=glIsEnabled(GL_SCISSOR_TEST);
@@ -110,7 +136,7 @@ static void apply_viewport(void) {
  TBWindow *w=event_window(0);if(!w||!SDL_GL_GetCurrentContext())return;
  int width,height;SDL_GL_GetDrawableSize(w->window,&width,&height);
  TBViewport vp=tb_fit_viewport(width,height,w->presentation_width,w->logical_height);
- if(w->presentation_width>w->logical_width && !(widescreen_world&&(!widescreen_overlay_depth||cursor_overlay_depth||effect_overlay_depth))) {
+ if(w->presentation_width>w->logical_width && !(widescreen_world&&(!widescreen_overlay_depth||cursor_overlay_depth||inventory_overlay_depth||effect_overlay_depth))) {
   int central=(int64_t)vp.width*w->logical_width/w->presentation_width;
   vp.x+=(vp.width-central)/2;vp.width=central;
  }
@@ -272,7 +298,11 @@ int tb_poll_event(TBEvent *out) {
   if(e.type==SDL_MOUSEMOTION){TBWindow *w=event_window(e.motion.windowID);
    if(w&&w->presentation){TBViewport vp=mouse_viewport(w);int x,y;
     if(widescreen_scene)tb_map_world_mouse(vp,world_mouse_viewport(w),e.motion.x,e.motion.y,w->logical_width,w->logical_height,&x,&y);
-    else tb_map_mouse(vp,e.motion.x,e.motion.y,w->logical_width,w->logical_height,&x,&y);
+    else if(!tb_map_mouse(vp,e.motion.x,e.motion.y,w->logical_width,w->logical_height,&x,&y) && w->presentation_width>w->logical_width) {
+     /* A central menu must not hover its x=0 buttons while the pointer is
+      * on a widescreen side bar. Preserve the legacy 4:3 clamping policy. */
+     x=y=-1;
+    }
     e.motion.x=x;e.motion.y=y;
     if(vp.width>0&&vp.height>0){w->relative_x+=(int64_t)e.motion.xrel*w->logical_width;w->relative_y+=(int64_t)e.motion.yrel*w->logical_height;
      e.motion.xrel=w->relative_x/vp.width;e.motion.yrel=w->relative_y/vp.height;w->relative_x%=vp.width;w->relative_y%=vp.height;}

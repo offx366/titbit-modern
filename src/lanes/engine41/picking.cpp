@@ -2,6 +2,9 @@
 // a bounding sphere and the box's 12 triangles, ray vs. mesh in object space,
 // and the per-frame selection with enter/leave notifications.
 #include <math.h>
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+#include "../../native/widescreen_hooks.h"
+#endif
 #pragma intrinsic(sqrt)
 
 struct CVec3 {
@@ -173,6 +176,11 @@ void PickingRay::Select_004115c0() {
   m = *(BoxMatrix *)b->world;
   float sx = (float)(mx - left) / (float)(right - left) * 1024.0f;
   float sy = (float)(my - bottom) / (float)(top - bottom) * 768.0f;
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+  // Inverse of this root window's presentation transform. Send the same local
+  // coordinates to its script so slot selection and hover animation agree.
+  sx = CompatOverlayMouseX((const char *)o + 0x14, sx);
+#endif
   float px = m.m[4] * b->center[1] + m.m[8] * b->center[2] + m.m[0] * b->center[0] + m.m[12] - b->extra[0];
   float py = m.m[5] * b->center[1] + m.m[9] * b->center[2] + m.m[1] * b->center[0] + m.m[13] - b->extra[1];
   if (px <= sx && sx <= b->extra[0] + b->extra[0] + px && py <= sy && sy <= b->extra[1] + b->extra[1] + py) {

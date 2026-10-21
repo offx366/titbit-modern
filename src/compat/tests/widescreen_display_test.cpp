@@ -83,6 +83,24 @@ int main() {
  CompatEndCursorOverlay();glGetIntegerv(GL_VIEWPORT,view);CHECK(view[0]==200 && view[2]==1200);
  double projection[16];glGetDoublev(GL_PROJECTION_MATRIX,projection);
  CHECK(projection[0]==2.0/1024.0 && projection[12]==-1.0);
+ // Inventory is authored in local 0..64 coordinates. Drawing and hit/event
+ // coordinates must use the same edge transform, independently of menus.
+ CHECK(CompatOverlayMouseX("items",-170.0f)>0.66f && CompatOverlayMouseX("items",-170.0f)<0.67f);
+ CHECK(CompatOverlayMouseX("mainmenu",-170.0f)==-170.0f);
+ CHECK(CompatOverlayMouseX("Items",-170.0f)==-170.0f);
+ CHECK(CompatOverlayMouseX(0,-170.0f)==-170.0f);
+ CompatBeginInventoryOverlay();
+ CHECK(CompatBeginFullscreenEffect(0,0,1024,768,0.01f,0.01f)==0);
+ glColor3f(1,0,0);glBegin(GL_QUADS);
+ glVertex2f(0,0);glVertex2f(64,0);glVertex2f(64,768);glVertex2f(0,768);glEnd();
+ glFinish();glReadPixels(10,450,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
+ CHECK(pixel[0]==255 && pixel[1]==0 && pixel[2]==0);
+ glReadPixels(210,450,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);
+ CHECK(pixel[0]>=126 && pixel[0]<=129 && pixel[1]==pixel[0]);
+ CompatEndInventoryOverlay();
+ glGetIntegerv(GL_VIEWPORT,view);CHECK(view[0]==200 && view[2]==1200);
+ glGetDoublev(GL_PROJECTION_MATRIX,projection);
+ CHECK(projection[0]==2.0/1024.0 && projection[12]==-1.0);
  CompatEndOverlay();glGetIntegerv(GL_VIEWPORT,view);CHECK(view[0]==0 && view[2]==1600);
  SendMessageA(window,WM_MOUSEMOVE,0,MAKELPARAM(800,450));CHECK(mouse_x==512 && mouse_y==384);
  SendMessageA(window,WM_MOUSEMOVE,0,MAKELPARAM(0,450));CHECK(mouse_x<0 && mouse_y==384);
@@ -98,6 +116,7 @@ int main() {
  CompatEndOverlay();
  CompatSceneChanged("minigame.XML");CompatBeginFrame();
  CHECK(CompatWorldAspect(4.0/3.0)==4.0/3.0);
+ CHECK(CompatOverlayMouseX("items",-170.0f)==-170.0f);
  glGetIntegerv(GL_VIEWPORT,view);CHECK(view[0]==200 && view[2]==1200);
  CHECK(glGetError()==GL_NO_ERROR);
  wglMakeCurrent(0,0);wglDeleteContext(gl);ReleaseDC(window,dc);DestroyWindow(window);

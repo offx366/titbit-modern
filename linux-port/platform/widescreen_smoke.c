@@ -19,6 +19,9 @@ extern void API CompatBeginOverlay(void);
 extern void API CompatEndOverlay(void);
 extern void API CompatBeginCursorOverlay(void);
 extern void API CompatEndCursorOverlay(void);
+extern float API CompatOverlayMouseX(const char *,float);
+extern void API CompatBeginInventoryOverlay(void);
+extern void API CompatEndInventoryOverlay(void);
 extern int API CompatBeginFullscreenEffect(float,float,float,float,float,float);
 extern void API CompatEndFullscreenEffect(int);
 static void rectangle(float x,float y,float width,float height) {
@@ -26,6 +29,35 @@ static void rectangle(float x,float y,float width,float height) {
 }
 static unsigned red(int x,int y) {unsigned char pixel[4];glReadPixels(x,y,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);return pixel[0];}
 static void white_frame(void) {glDisable(GL_SCISSOR_TEST);glClearColor(1,1,1,1);glClear(GL_COLOR_BUFFER_BIT);glEnable(GL_SCISSOR_TEST);}
+static void cleared_side_bars(void) {
+ CompatSceneChanged("test.xml");CompatWorldAspect(4.0/3);
+ glDisable(GL_SCISSOR_TEST);glClearColor(1,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
+ glEnable(GL_SCISSOR_TEST);glScissor(170,120,42,48);glColorMask(GL_FALSE,GL_TRUE,GL_FALSE,GL_TRUE);glDepthMask(GL_FALSE);
+ CompatSceneChanged("menu.xml");CompatWorldAspect(4.0/3);
+ assert(red(10,384)==0&&red(1350,384)==0);
+ GLboolean mask[4],depth;int box[4];glGetBooleanv(GL_COLOR_WRITEMASK,mask);glGetBooleanv(GL_DEPTH_WRITEMASK,&depth);glGetIntegerv(GL_SCISSOR_BOX,box);
+ assert(!mask[0]&&mask[1]&&!mask[2]&&mask[3]&&!depth&&glIsEnabled(GL_SCISSOR_TEST));
+ assert(box[0]==170&&box[1]==120&&box[2]==42&&box[3]==48);
+ glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE);glDepthMask(GL_TRUE);glDisable(GL_SCISSOR_TEST);
+ puts("PASS previous wide color cleared from central-menu side bars; original scissor/color/depth masks restored");
+}
+static void inventory_overlay(void) {
+ CompatSceneChanged("test.xml");CompatWorldAspect(4.0/3);CompatBeginOverlay();
+ assert(CompatOverlayMouseX("items",-171)==0);
+ assert(CompatOverlayMouseX("mainmenu",-171)==-171);
+ assert(CompatOverlayMouseX(NULL,-171)==-171);
+ glMatrixMode(GL_PROJECTION);glLoadIdentity();glOrtho(0,1024,768,0,-10000,20000);glMatrixMode(GL_MODELVIEW);glLoadIdentity();
+ white_frame();CompatBeginInventoryOverlay();
+ int vp[4];glGetIntegerv(GL_VIEWPORT,vp);assert(vp[0]==0&&vp[2]==1366);
+ assert(!CompatBeginFullscreenEffect(0,0,1024,768,.01f,.01f));
+ glColor4f(0,0,0,1);rectangle(0,100,70,100);
+ assert(red(5,618)==0&&red(180,618)==255);
+ CompatEndInventoryOverlay();glGetIntegerv(GL_VIEWPORT,vp);assert(vp[0]==171&&vp[2]==1024);
+ CompatBeginInventoryOverlay();CompatSceneChanged("menu.xml");CompatEndInventoryOverlay();CompatEndOverlay();
+ double projection[16];glGetDoublev(GL_PROJECTION_MATRIX,projection);assert(fabs(projection[0]-2.0/1024)<1e-12);
+ assert(CompatOverlayMouseX("items",-171)==-171);
+ puts("PASS inventory draws at true wide left edge; root-only corrected picking; centered menus unchanged; balanced projection on scene change");
+}
 static void photometric_effect(void) {
  CompatSceneChanged("test.xml");CompatWorldAspect(4.0/3);
  glDisable(GL_DEPTH_TEST);glDisable(GL_TEXTURE_2D);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
@@ -80,5 +112,8 @@ int main(void) {
  assert(!tb_map_world_mouse(canvas,world,world.x,world.top-1,1024,768,&lx,&ly)&&lx==-1&&ly==-1);
  assert(!tb_map_world_mouse(canvas,world,world.x+world.width,world.top+1,1024,768,&lx,&ly)&&lx==-1&&ly==-1);
  CompatSceneChanged("menu.xml");assert(CompatWorldMouseX(1)==1);
- photometric_effect();remove(path);tb_window_destroy(window);tb_shutdown();puts("PASS wide world, failclosed scenes, nested central UI scissor, left/right wing motion/buttons, letterboxes and picking aspect");return 0;
+ event.type=SDL_MOUSEMOTION;event.motion.windowID=SDL_GetWindowID(SDL_GL_GetCurrentWindow());event.motion.x=10;event.motion.y=217;
+ assert(SDL_PushEvent(&event)==1);found=0;while(tb_poll_event(&out))if(out.message==0x200){assert(out.x==-1&&out.y==-1);found=1;}assert(found);
+ event.motion.x=171+512;assert(SDL_PushEvent(&event)==1);found=0;while(tb_poll_event(&out))if(out.message==0x200){assert(out.x==512&&out.y==217);found=1;}assert(found);
+ cleared_side_bars();photometric_effect();inventory_overlay();remove(path);tb_window_destroy(window);tb_shutdown();puts("PASS wide world, failclosed scenes, nested central UI scissor, left/right wing motion/buttons, letterboxes and picking aspect");return 0;
 }

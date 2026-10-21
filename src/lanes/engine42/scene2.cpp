@@ -138,9 +138,10 @@ void Scene::DrawOverlay_00424a30() {
   if (!mesh) continue;
 #if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
   bool cursor = window == pointNode;
-  // The cursor follows the world mouse into the extended side fields. Every
-  // other interface object retains the original horizontal canvas bounds.
-  if (!cursor) {
+  bool inventory = CompatOverlayMouseX(window->name,0.0f) != 0.0f;
+  // Cursor follows the world mouse; the sliding inventory is docked at the
+  // actual wide left edge. Main menus, dialogs and minigames remain central.
+  if (!cursor && !inventory) {
 #endif
   if (mesh->ox + mesh->x + mesh->width < 0.0f) continue;
   if (mesh->ox + mesh->x - mesh->width > 1024.0f) continue;
@@ -151,11 +152,13 @@ void Scene::DrawOverlay_00424a30() {
   if (mesh->y + mesh->oy - mesh->height > 768.0f) continue;
 #if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
   if (cursor) CompatBeginCursorOverlay();
+  else if (inventory) CompatBeginInventoryOverlay();
 #endif
   window->Update(g_005026bc);
   window->Render(g_005026bc);
 #if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
   if (cursor) CompatEndCursorOverlay();
+  else if (inventory) CompatEndInventoryOverlay();
 #endif
  }
  glDisable(0xde1);

@@ -26,7 +26,7 @@ from PIL import Image, ImageDraw
 
 RATIOS = {"16x9": 1366, "16x10": 1230}
 RECIPE = "whole-frame-v2-atlas-bottom768"
-PACK_RECIPE = "isolated-background-native-foreground-v5"
+PACK_RECIPE = "isolated-background-native-overlays-v7"
 CLEAN_PLATES = {"club_dans_render_02.tga": ["club_disko02.xml"]}
 EXCLUDE = {"startup.xml", "menu.xml", "map.xml", "chemodan.xml", "shiva.xml",
            "trax.xml", "gameboom.xml", "gameover.xml", "happyend.xml", "intro.xml",
@@ -507,6 +507,36 @@ def pack(work, ratio, require_complete=False):
     if set(map(asset_key,posters))&set(map(asset_key,replacements)):
         raise ValueError('Poster repair overlaps another replacement')
     replacements.update(posters)
+    from widescreen_native_overlays import build_native_overlay_replacements, NATIVE_PATCHES
+    from widescreen_native_masks import RECIPES
+    config=load(ROOT/'tools/widescreen_native_contours.json')
+    overlay_scenes={asset_key(n) for row,_ in ready.values() for n in row['scenes']}
+    registry=dict(NATIVE_PATCHES)
+    for name,rule in config['patches'].items():
+        if asset_key(rule['texture']) not in background_textures or not set(map(asset_key,rule['scenes'])).intersection(overlay_scenes):
+            continue
+        rule=dict(rule)
+        if rule.get('maskRecipe'):
+            mask_recipe=rule.pop('maskRecipe')
+            if mask_recipe=='polygons':
+                from PIL import ImageDraw
+                source=Image.open(io.BytesIO(archive.read(rule['texture'])))
+                mask=Image.new('L',source.size,0)
+                draw=ImageDraw.Draw(mask)
+                for polygon in rule['polygons']:draw.polygon([tuple(p) for p in polygon],fill=255)
+                rule['foregroundMaskImage']=mask
+            else:
+                texture,recipe=RECIPES[mask_recipe]
+                if asset_key(texture)!=asset_key(rule['texture']):
+                    raise ValueError('Native foreground mask recipe texture mismatch: '+name)
+                rule['foregroundMaskImage']=recipe(Image.open(io.BytesIO(archive.read(texture))))
+        registry[name]=rule
+    overlays,overlay_proof=build_native_overlay_replacements(
+        archive,overlay_scenes,background_textures,width,registry=registry,
+        generated_payloads=replacements)
+    if set(map(asset_key,overlays))&set(map(asset_key,replacements)):
+        raise ValueError('Native overlay repair overlaps another replacement')
+    replacements.update(overlays)
     folder=work/"mod"/ratio;folder.mkdir(parents=True,exist_ok=True)
     # Archive.build also retains unchanged compressed payloads/duplicate ordering.
     data=archive.build(replacements)
@@ -523,9 +553,10 @@ def pack(work, ratio, require_complete=False):
     (folder/"widescreen-scenes.txt").write_text("\n".join(allowed)+"\n",encoding="utf-8")
     proof=dict(ratio=ratio,sourceSha256=manifest["archiveSha256"],modSha256=file_hash(target),
                recipe=PACK_RECIPE,generatedOutputs={row['id']:file_hash(work/'out'/ratio/(row['id']+'.png')) for row,_ in ready.values()},
-               dedicatedBackgroundTextures=background_textures,originalPropResourcesPreserved=not (foreground or posters),
+               dedicatedBackgroundTextures=background_textures,originalPropResourcesPreserved=not (foreground or posters or overlays),
                originalPropTexturesAndMaterialsPreserved=True,nativeForeground=foreground_proof,
                modifiedForegroundMeshes=sorted(foreground),posterOccluders=poster_proof,
+               nativeOverlays=overlay_proof,intrinsicNativePlanesPreserved=config['preserved'],
                originalAlphaMattesPreserved=True,originalCenterRgbComposited=False,
                generatedBackgrounds=len(ready),eligibleScenes=allowed,modifiedMeshes=sorted(affected),
                completeRequestedWorldBackgrounds=set(ready)==required,
