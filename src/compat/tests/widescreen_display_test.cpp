@@ -50,6 +50,7 @@ int main() {
  CompatSceneChanged("locations\\STREET.xml");CompatBeginFrame();
  CHECK(CompatWorldAspect(4.0/3.0)==16.0/9.0);
  glGetIntegerv(GL_VIEWPORT,view);CHECK(view[0]==0 && view[2]==1600 && view[3]==900);
+ CHECK(CompatBeginFullscreenEffect(0,0,1024,768,0.01f,0.01f)==0); // world pass
  CHECK(CompatWorldMouseX(1.0)==0.75);
  glClearColor(0,0,1,1);glClear(GL_COLOR_BUFFER_BIT);
  CompatBeginOverlay();glGetIntegerv(GL_VIEWPORT,view);
@@ -61,6 +62,19 @@ int main() {
  CHECK(pixel[0]==255 && pixel[2]==0);
  glMatrixMode(GL_PROJECTION);glLoadIdentity();glOrtho(0,1024,768,0,-10000,20000);
  glMatrixMode(GL_MODELVIEW);glLoadIdentity();
+ CHECK(CompatBeginFullscreenEffect(0,0,1024,768,1,1)==0); // regular full-screen menu
+ CHECK(CompatBeginFullscreenEffect(0,0,400,300,0.01f,0.01f)==0); // dialog
+ glGetIntegerv(GL_VIEWPORT,view);CHECK(view[0]==200 && view[2]==1200);
+ CompatEndOverlay();glClearColor(1,1,1,1);glClear(GL_COLOR_BUFFER_BIT);CompatBeginOverlay();
+ int effect=CompatBeginFullscreenEffect(0,0,1024,768,0.01f,0.01f);CHECK(effect==1);
+ glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glColor4f(0,0,0,0.5f);
+ glBegin(GL_TRIANGLE_STRIP);glVertex2f(1024,0);glVertex2f(0,0);glVertex2f(1024,768);glVertex2f(0,768);glEnd();
+ CompatEndFullscreenEffect(effect);glDisable(GL_BLEND);glFinish();
+ glGetIntegerv(GL_VIEWPORT,view);CHECK(view[0]==200 && view[2]==1200);
+ glReadPixels(80,450,1,1,GL_RGBA,GL_UNSIGNED_BYTE,pixel);CHECK(pixel[0]>=126 && pixel[0]<=129);
+ unsigned char center[4],right[4];glReadPixels(800,450,1,1,GL_RGBA,GL_UNSIGNED_BYTE,center);
+ glReadPixels(1520,450,1,1,GL_RGBA,GL_UNSIGNED_BYTE,right);
+ CHECK(center[0]==pixel[0] && right[0]==pixel[0]);
  CompatBeginCursorOverlay();
  glColor3f(0,1,0);glBegin(GL_QUADS);
  glVertex2f(-110,380);glVertex2f(-90,380);glVertex2f(-90,388);glVertex2f(-110,388);glEnd();

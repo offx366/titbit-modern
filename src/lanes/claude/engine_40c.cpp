@@ -2,6 +2,9 @@
 // resource holders released through the global resource manager (0x5ee6f0).
 #include "lane_engine.h"
 #include "lane_string.h"
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+#include "../../native/widescreen_hooks.h"
+#endif
 extern "C" __declspec(dllimport) char *__stdcall CharNextA(const char *);
 
 // MBCS strchr (0x40c3a0)
@@ -331,6 +334,9 @@ void TextureView::Draw_0040f4e0(int time) {
  GameObjectBones *object = (GameObjectBones *)owner;
  glLoadMatrixf(object->bones[field8].local.m);
  glBindTexture(0xde1, resource);
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+ int fullscreen_effect = CompatBeginFullscreenEffect(v24.x, v24.y, v18.x, v18.y, v3c.x, v3c.y);
+#endif
  glBegin(5);                            // GL_TRIANGLE_STRIP
  glTexCoord2f(v30.x + v3c.x, v30.y);
  glVertex3f(v24.x + v18.x, v24.y, v24.z);
@@ -341,6 +347,9 @@ void TextureView::Draw_0040f4e0(int time) {
  glTexCoord2f(v30.x, v30.y + v3c.y);
  glVertex3f(v24.x, v18.y + v24.y, v24.z);
  glEnd();
+#if defined(TITBIT_COMPAT) || defined(TITBIT_WIDESCREEN_HOOKS)
+ CompatEndFullscreenEffect(fullscreen_effect);
+#endif
  glDisable(0xde1);
  glPopMatrix();
  glColor4f(1.0f, 1.0f, 1.0f, 1.0f);

@@ -48,6 +48,9 @@ void __stdcall CompatBeginOverlay(void);
 void __stdcall CompatEndOverlay(void);
 void __stdcall CompatBeginCursorOverlay(void);
 void __stdcall CompatEndCursorOverlay(void);
+int __stdcall CompatBeginFullscreenEffect(float x, float y, float width, float height,
+                                          float uv_width, float uv_height);
+void __stdcall CompatEndFullscreenEffect(int expanded);
 /* Development validation only: gated scene entry on a hidden desktop. */
 const char *__stdcall CompatInitialScene(void);
 

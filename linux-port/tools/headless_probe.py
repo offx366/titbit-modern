@@ -65,8 +65,17 @@ def main():
             ready=False
             while time.monotonic()<deadline and display.poll() is None:
                 with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as connection:
-                    try:connection.connect('\0/tmp/.X11-unix/X'+str(candidate));ready=True;break
-                    except OSError:time.sleep(.05)
+                    try:
+                        connection.connect('\0/tmp/.X11-unix/X'+str(candidate))
+                        # Parallel probes can race between selecting a free
+                        # number and starting Xvfb. A listening socket alone
+                        # might belong to another probe's server; only accept
+                        # the display whose X lock contains our child's PID.
+                        owner=int(Path('/tmp/.X'+str(candidate)+'-lock').read_text().strip())
+                        if owner==display.pid and display.poll() is None:
+                            ready=True;break
+                    except (OSError,ValueError):pass
+                    time.sleep(.05)
             if ready:break
             display.terminate();display.wait()
         if not display or not ready:raise RuntimeError('Private Xvfb did not start')
@@ -149,7 +158,7 @@ def main():
                     scenes.append(loading_scene);loading_scene=None
             images=[json.loads(path.read_text()) for path in sorted(a.out.glob('frame-*.json'))]
             report={'executableSha256':hashlib.sha256(executable.read_bytes()).hexdigest(),
-                    'display':environment['DISPLAY'],'videoDriver':'x11','privateXvfb':True,'widescreen':a.widescreen,'validationScene':a.scene,
+                    'display':environment['DISPLAY'],'ownedXvfbPid':display.pid,'videoDriver':'x11','privateXvfb':True,'widescreen':a.widescreen,'validationScene':a.scene,
                     'stoppedAfterActions':a.stop_after_actions and stop_file.exists(),
                     'worldExpanded':bool(a.scene and 'Widescreen scene '+a.scene+': world enabled' in text),
                     'seconds':round(time.monotonic()-start,2),'exitCode':code,'framesRequested':a.frames,

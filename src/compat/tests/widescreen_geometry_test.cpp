@@ -1,5 +1,6 @@
 /* Pure presentation geometry; no window, display-mode or focus changes. */
 #include "../display_geometry.h"
+#include "../widescreen_effect_geometry.h"
 #define CHECK(x) do { if (!(x)) return __LINE__; } while (0)
 int main() {
  CompatViewport wide = CompatFitViewport(1920,1080,16,9,false);
@@ -26,5 +27,14 @@ int main() {
  CompatViewport classic = CompatFitViewport(1920,1080,1024,768,false);
  CHECK(!CompatMapMouse(classic,0,540,1024,768,&x,&y));
  CHECK(CompatMapMouse(classic,960,540,1024,768,&x,&y) && x == 512 && y == 384);
+ float matrix[16]={1,0,0,0,0,1,0,0,0,0,1,0,0,0,1000,1};
+ CHECK(CompatIsFullscreenEffect(matrix,0,0,1024,768,0.01f,0.01f));
+ CHECK(CompatIsFullscreenEffect(matrix,0,768,1024,-768,0.121f,-0.121f));
+ CHECK(!CompatIsFullscreenEffect(matrix,0,0,1024,768,1,1)); // menu image
+ CHECK(!CompatIsFullscreenEffect(matrix,0,0,400,300,0.01f,0.01f)); // dialog
+ matrix[12]=1;
+ CHECK(!CompatIsFullscreenEffect(matrix,0,0,1024,768,0.01f,0.01f));
+ matrix[12]=0;matrix[1]=0.1f;
+ CHECK(!CompatIsFullscreenEffect(matrix,0,0,1024,768,0.01f,0.01f));
  return 0;
 }

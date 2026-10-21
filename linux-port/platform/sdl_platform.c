@@ -2,6 +2,7 @@
 #define _FILE_OFFSET_BITS 64
 #include "titbit_platform.h"
 #include "presentation.h"
+#include "../src/compat/widescreen_effect_geometry.h"
 #include <SDL.h>
 #include <GL/gl.h>
 #include <ctype.h>
@@ -24,6 +25,7 @@ static TBWindow *windows;
 static int widescreen_scene, widescreen_world, widescreen_overlay_depth;
 static int overlay_scissor[4], overlay_scissor_enabled;
 static int cursor_overlay_depth, cursor_scissor[4], cursor_matrix_mode;
+static int effect_overlay_depth, effect_scissor[4], effect_scissor_enabled;
 static int widescreen_width(void) {
  const char *value=getenv("TITBIT_WIDESCREEN");
  return value && !strcmp(value,"16:9") ? 1366 : value && !strcmp(value,"16:10") ? 1230 : 1024;
@@ -81,6 +83,21 @@ void WIDE_API CompatEndCursorOverlay(void) {
  glMatrixMode(GL_PROJECTION);glPopMatrix();glMatrixMode(cursor_matrix_mode);
  apply_viewport();glScissor(cursor_scissor[0],cursor_scissor[1],cursor_scissor[2],cursor_scissor[3]);
 }
+int WIDE_API CompatBeginFullscreenEffect(float x,float y,float width,float height,float du,float dv) {
+ if(!widescreen_scene || !widescreen_world || !widescreen_overlay_depth || cursor_overlay_depth || effect_overlay_depth)return 0;
+ float matrix[16];glGetFloatv(GL_MODELVIEW_MATRIX,matrix);
+ if(!CompatIsFullscreenEffect(matrix,x,y,width,height,du,dv))return 0;
+ glGetIntegerv(GL_SCISSOR_BOX,effect_scissor);effect_scissor_enabled=glIsEnabled(GL_SCISSOR_TEST);
+ effect_overlay_depth=1;apply_viewport();
+ int viewport[4];glGetIntegerv(GL_VIEWPORT,viewport);glEnable(GL_SCISSOR_TEST);glScissor(viewport[0],viewport[1],viewport[2],viewport[3]);
+ return 1;
+}
+void WIDE_API CompatEndFullscreenEffect(int expanded) {
+ if(!expanded || !effect_overlay_depth)return;
+ effect_overlay_depth=0;apply_viewport();
+ glScissor(effect_scissor[0],effect_scissor[1],effect_scissor[2],effect_scissor[3]);
+ if(effect_scissor_enabled)glEnable(GL_SCISSOR_TEST);else glDisable(GL_SCISSOR_TEST);
+}
 double WIDE_API CompatWorldMouseX(double original) {
  return widescreen_scene ? original*(1024.0/widescreen_width()) : original;
 }
@@ -93,7 +110,7 @@ static void apply_viewport(void) {
  TBWindow *w=event_window(0);if(!w||!SDL_GL_GetCurrentContext())return;
  int width,height;SDL_GL_GetDrawableSize(w->window,&width,&height);
  TBViewport vp=tb_fit_viewport(width,height,w->presentation_width,w->logical_height);
- if(w->presentation_width>w->logical_width && !(widescreen_world&&(!widescreen_overlay_depth||cursor_overlay_depth))) {
+ if(w->presentation_width>w->logical_width && !(widescreen_world&&(!widescreen_overlay_depth||cursor_overlay_depth||effect_overlay_depth))) {
   int central=(int64_t)vp.width*w->logical_width/w->presentation_width;
   vp.x+=(vp.width-central)/2;vp.width=central;
  }

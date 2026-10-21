@@ -7,6 +7,7 @@
 #include "compat.h"
 #include "compat_internal.h"
 #include "display_geometry.h"
+#include "widescreen_effect_geometry.h"
 
 static HWND game_window;
 static WNDPROC game_proc;
@@ -15,6 +16,8 @@ static bool is_fullscreen, stretch;
 static int logical_width = 1024, logical_height = 768;
 static bool exclusive_checked, exclusive;
 static bool wide_scene;
+static unsigned overlay_depth;
+static bool cursor_projection;
 static bool WideRequested() {
  static int configured = -1;
  if (configured < 0) configured = CompatSettingIs("aspect", "fit", "widescreen");
@@ -194,12 +197,26 @@ extern "C" double __stdcall CompatWorldMouseX(double original_ndc) {
  return vp.width > 0 ? original_ndc * (4.0 / 3.0) * vp.height / vp.width : original_ndc;
 }
 extern "C" void __stdcall CompatBeginOverlay(void) {
+ ++overlay_depth;
  if (game_window && WideActive()) SetViewport(CenterViewport(game_window));
 }
 extern "C" void __stdcall CompatEndOverlay(void) {
+ if (overlay_depth) --overlay_depth;
  if (game_window && WideActive()) SetViewport(Viewport(game_window));
 }
-static bool cursor_projection;
+extern "C" int __stdcall CompatBeginFullscreenEffect(float x, float y, float width, float height,
+                                                     float uv_width, float uv_height) {
+ if (!game_window || !WideActive() || !overlay_depth || cursor_projection) return 0;
+ float matrix[16]; glGetFloatv(GL_MODELVIEW_MATRIX, matrix);
+ if (!CompatIsFullscreenEffect(matrix,x,y,width,height,uv_width,uv_height)) return 0;
+ // Keep the original 1024x768 orthographic coordinates, but span the world
+ // viewport for this single photometric mask. All other UI stays central.
+ SetViewport(Viewport(game_window));
+ return 1;
+}
+extern "C" void __stdcall CompatEndFullscreenEffect(int expanded) {
+ if (expanded && game_window) SetViewport(CenterViewport(game_window));
+}
 extern "C" void __stdcall CompatBeginCursorOverlay(void) {
  cursor_projection = game_window && WideActive();
  if (!cursor_projection) return;
