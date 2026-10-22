@@ -49,6 +49,19 @@ class PipelineTests(unittest.TestCase):
 
     def tearDown(self):self.tmp.cleanup()
 
+    def test_repack_preserves_hardlinked_reader_snapshot(self):
+        generated=self.root/'generated.png'
+        Image.new('RGB',(1366,768),(5,35,230)).save(generated)
+        ws.accept(self.work,self.row['id'],generated);ws.pack(self.work,'16x9',True)
+        mod=self.work/'mod/16x9/QUEST.ezd';snapshot=self.root/'sealed-reader.ezd'
+        snapshot.hardlink_to(mod);before=snapshot.read_bytes()
+        Image.new('RGB',(1366,768),(210,80,20)).save(generated)
+        ws.accept(self.work,self.row['id'],generated);ws.pack(self.work,'16x9',True)
+        self.assertEqual(snapshot.read_bytes(),before)
+        self.assertNotEqual(mod.read_bytes(),before)
+        self.assertFalse(mod.samefile(snapshot))
+        self.assertEqual(ws.file_hash(self.original),self.hash)
+
     def test_whole_frame_replacement_and_shared_atlas_users(self):
         center=Image.open(self.work/'source'/self.row['id']/'center.png')
         self.assertEqual(center.getpixel((0,0)),(220,10,15,255))

@@ -18,6 +18,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "editor"))
@@ -26,7 +27,7 @@ from PIL import Image, ImageDraw
 
 RATIOS = {"16x9": 1366, "16x10": 1230}
 RECIPE = "whole-frame-v2-atlas-bottom768"
-PACK_RECIPE = "isolated-background-native-overlays-v7"
+PACK_RECIPE = "isolated-background-native-overlays-v8"
 CLEAN_PLATES = {"club_dans_render_02.tga": ["club_disko02.xml"]}
 EXCLUDE = {"startup.xml", "menu.xml", "map.xml", "chemodan.xml", "shiva.xml",
            "trax.xml", "gameboom.xml", "gameover.xml", "happyend.xml", "intro.xml",
@@ -518,7 +519,10 @@ def pack(work, ratio, require_complete=False):
         rule=dict(rule)
         if rule.get('maskRecipe'):
             mask_recipe=rule.pop('maskRecipe')
-            if mask_recipe=='polygons':
+            if mask_recipe=='background':
+                source=Image.open(io.BytesIO(archive.read(rule['texture'])))
+                rule['foregroundMaskImage']=Image.new('L',source.size,0)
+            elif mask_recipe=='polygons':
                 from PIL import ImageDraw
                 source=Image.open(io.BytesIO(archive.read(rule['texture'])))
                 mask=Image.new('L',source.size,0)
@@ -537,16 +541,30 @@ def pack(work, ratio, require_complete=False):
     if set(map(asset_key,overlays))&set(map(asset_key,replacements)):
         raise ValueError('Native overlay repair overlaps another replacement')
     replacements.update(overlays)
+    from widescreen_native_overlays import build_sampler_clamp_replacements
+    sampler,sampler_proof=build_sampler_clamp_replacements(archive,overlay_scenes,config.get('samplerClamps',{}))
+    if set(map(asset_key,sampler))&set(map(asset_key,replacements)):
+        raise ValueError('Native sampler repair overlaps another replacement')
+    replacements.update(sampler)
     folder=work/"mod"/ratio;folder.mkdir(parents=True,exist_ok=True)
     # Archive.build also retains unchanged compressed payloads/duplicate ordering.
     data=archive.build(replacements)
     target=folder/"QUEST.ezd"
     if target.resolve()==archive_path.resolve() or (target.exists() and target.samefile(archive_path)):
         raise ValueError('Refusing to overwrite the input archive, including through a hard link')
-    target.write_bytes(data)
-    check=Archive(target)
-    for name,data in replacements.items():
-        if check.read(name)!=data:raise AssertionError("Mod roundtrip failed: "+name)
+    # Publish only after validation. Existing readers/hard-linked immutable QA
+    # copies retain their previous inode while the owner builds the next mod.
+    staging=None
+    try:
+        with tempfile.NamedTemporaryFile(mode='wb',dir=folder,prefix='.QUEST-',suffix='.tmp',delete=False) as stream:
+            staging=Path(stream.name)
+            stream.write(data)
+        check=Archive(staging)
+        for name,payload in replacements.items():
+            if check.read(name)!=payload:raise AssertionError("Mod roundtrip failed: "+name)
+        os.replace(staging,target)
+    finally:
+        if staging is not None and staging.exists():staging.unlink()
     ready_keys=set(ready)
     allowed=[s["name"] for s in manifest["scenes"] if not s["excluded"] and asset_key(s['name']) not in retained and s["backgrounds"] and
              not s["unresolved"] and set(s["backgrounds"])<=ready_keys]
@@ -557,6 +575,7 @@ def pack(work, ratio, require_complete=False):
                originalPropTexturesAndMaterialsPreserved=True,nativeForeground=foreground_proof,
                modifiedForegroundMeshes=sorted(foreground),posterOccluders=poster_proof,
                nativeOverlays=overlay_proof,intrinsicNativePlanesPreserved=config['preserved'],
+               nativeSamplerClamps=sampler_proof,
                originalAlphaMattesPreserved=True,originalCenterRgbComposited=False,
                generatedBackgrounds=len(ready),eligibleScenes=allowed,modifiedMeshes=sorted(affected),
                completeRequestedWorldBackgrounds=set(ready)==required,

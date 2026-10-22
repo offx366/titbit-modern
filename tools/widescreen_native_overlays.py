@@ -23,6 +23,59 @@ from PIL import Image
 def sha(data): return hashlib.sha256(data).hexdigest()
 
 
+def pad_native_sampler(mesh_bytes,texture_bytes,material_index,material_name):
+    """Clamp a rigid prop's out-of-atlas U without changing in-atlas sampling.
+
+    The counter contains authored U>1 that was offscreen at 4:3. GL_REPEAT
+    exposes unrelated ceiling pixels in the new wing. An exact native left
+    half plus repeated edge column and U/2 implements per-fragment edge clamp;
+    clamping vertex UVs instead would stretch the valid native surface too.
+    This is prop sampler padding, never a replacement for background generation.
+    """
+    source=Image.open(io.BytesIO(texture_bytes)).convert('RGBA')
+    if source.size!=(1024,1024):raise ValueError('Native sampler padding expects a 1024px atlas')
+    padded=Image.new('RGBA',(2048,1024));padded.paste(source,(0,0))
+    padded.paste(source.crop((1023,0,1024,1024)).resize((1024,1024),Image.Resampling.NEAREST),(1024,0))
+    mesh=parse_meat(mesh_bytes);mesh['materialNames'][material_index]=material_name
+    changed=0
+    for part in mesh['parts']:
+        if part['flags']!=1 or len(set(part['vertexBones']))!=1:raise ValueError('Sampler repair expects rigid single-UV native parts')
+        for fi,mi in enumerate(part['faceMaterials']):
+            if mi!=material_index:continue
+            for corner in range(3):
+                k=fi*6+corner*2;u,v=part['uv'][k:k+2]
+                if not(0<=u<2 and 0<=v<=1):raise ValueError('Native prop exceeds supported clamp domain')
+                part['uv'][k]=u/2;changed+=1
+    if not changed:raise ValueError('Native sampler material is not used')
+    out=io.BytesIO();padded.save(out,format='TGA')
+    return write_meat(mesh),out.getvalue(),dict(recipe='native-prop-u-edge-clamp-v1',
+        sourceMeshSha256=sha(mesh_bytes),sourceTextureSha256=sha(texture_bytes),
+        originalTexturePixelsPreserved=True,originalGeometryPreserved=True,
+        originalVPreserved=True,uScale=.5,paddedTextureSize=[2048,1024])
+
+
+def build_sampler_clamp_replacements(archive,scenes,registry):
+    if not hasattr(archive,'read'):archive=Archive(archive)
+    selected=set(map(asset_key,scenes));replacements={};proof=[]
+    for name,rule in registry.items():
+        if not selected.intersection(map(asset_key,rule['scenes'])):continue
+        mesh=archive.read(name);texture=archive.read(rule['texture'])
+        if sha(mesh)!=rule['meshSha256'] or sha(texture)!=rule['textureSha256']:
+            raise ValueError('Native sampler source hash mismatch: '+name)
+        mi=int(rule.get('material',0));original=parse_meat(mesh);mt=original['materialNames'][mi]
+        if not mt.lower().endswith('.mat'):mt+='.mat'
+        raw=archive.read(mt);mat=parse_mat(raw)
+        if mat['flags']!=1 or asset_key(mat['textures'][0])!=asset_key(rule['texture']):
+            raise ValueError('Native sampler source material mismatch: '+name)
+        clone='wp_'+sha((asset_key(name)+'|edge-clamp').encode())[:16]
+        encoded,tga,row=pad_native_sampler(mesh,texture,mi,clone)
+        replacements.update({name:encoded,clone+'.tga':tga,
+                             clone+'.mat':raw[:-32]+(clone+'.tga').encode('ascii').ljust(32,b'\0')})
+        row.update(mesh=name,texture=rule['texture'],material=mt,clone=clone,scenes=rule['scenes'])
+        proof.append(row)
+    return replacements,proof
+
+
 def inventory(archive, manifest, output=None):
     """Read all scene users of background atlases, including interface objects."""
     if not hasattr(archive, 'read'): archive = Archive(archive)
