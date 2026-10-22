@@ -335,9 +335,36 @@ NATIVE_PATCHES = {
                    (224,24),(232,25),(237,29),(237,32),(233,30),(228,29),(224,31),
                    (222,35),(214,36),(207,36),(197,38),(124,50),(117,49)]])
 }
-PROJECTED_PLANES = {'vxodsuki.meat':dict(scenes=['sumerki_entrance.xml'],texture='clubvxod_render_a_cc.tga',
+PROJECTED_PLANES = {'vxodsuki.meat':dict(scenes=['sumerki_entrance.xml'],texture='clubvxod_render_a_cc.tga',blinkLetters=True,
     meshSha256='4fa6053ef4cfada3978e9a420f16ae2aadff8b3f4ea458bfc8a15abe9cd3f543',
     textureSha256='8d67a685899279d233dc58420301a321658feb5df20c2f944d6831ab7df90c6a')}
+
+
+def sign_off_atlas(texture_bytes, ratio_width):
+    """Extinguish only MER in the generated sign, retaining its background.
+
+    Bounds are in the source-aligned 1024x768 camera raster. The original
+    vhod_suki.scv timer/culling selects between this face and the lit background.
+    No native wall pixels or a second mismatched sign rectangle are composited.
+    """
+    if ratio_width not in (1366, 1230):raise ValueError('Unsupported sign aspect')
+    image=Image.open(io.BytesIO(texture_bytes)).convert('RGBA')
+    if image.size!=(2048,1024):raise ValueError('Expected generated background atlas')
+    pad=(ratio_width-1024)//2
+    box=(pad+319,256+215,pad+363,256+241)
+    pixels=image.load();changed=0
+    for y in range(box[1],box[3]):
+        for x in range(box[0],box[2]):
+            r,g,b,a=pixels[x,y];base=max(g,b)
+            if r>base+24:
+                # Keep the low red spill on the sign panel. Clipping it to
+                # black would create another visible rectangular matte.
+                pixels[x,y]=(base+24+round((r-base-24)*.035),g,b,a)
+                changed+=1
+    if changed<150:raise ValueError('Generated sign no longer matches source-aligned MER bounds')
+    stream=io.BytesIO();image.save(stream,format='TGA')
+    return stream.getvalue(),dict(recipe='generated-neon-mer-off-v1',sourceCameraBounds=[319,215,363,241],
+                                  dimmedPixels=changed,originalTimerAndRotationPreserved=True)
 
 
 def retexture_dense_patch(mesh_bytes,part_index,material_index,texture_bytes,foreground_mask,
@@ -457,6 +484,11 @@ def build_native_overlay_replacements(archive,scenes,background_textures,ratio_w
             generated=textures[tn];clone='wn_'+sha((asset_key(mt)+'|'+generated+'|'+mode+('dense|'+asset_key(mn)if dense else '')).encode())[:16]
             if len(generated.encode('cp1251'))>31:raise ValueError('Generated texture name too long')
             replacement_texture=generated
+            if rule.get('blinkLetters'):
+                payloads={asset_key(k):v for k,v in (generated_payloads or {}).items()}
+                off,blink=sign_off_atlas(payloads[asset_key(generated)],ratio_width)
+                replacement_texture=clone+'.tga'
+                replacements[replacement_texture]=off
             if dense:
                 payloads={asset_key(k):v for k,v in (generated_payloads or {}).items()}
                 if asset_key(generated)not in payloads:raise ValueError('Dense repair needs generated_payloads['+generated+']')
@@ -475,6 +507,7 @@ def build_native_overlay_replacements(archive,scenes,background_textures,ratio_w
             if not dense:
                 if mode=='split':encoded,row=split_native_patch(current,pi,mi,rule['polygons'],mapper,clone,ratio_width)
                 else:encoded,row=retarget_projected_plane(current,pi,mi,mapper,clone,ratio_width)
+                if rule.get('blinkLetters'):row['blinkLetters']=blink
             if mn in replacements:
                 # Scene aliases must produce identical bytes. Do not re-split a
                 # mesh that was already transformed for a previous alias.

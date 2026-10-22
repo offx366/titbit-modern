@@ -27,7 +27,7 @@ from PIL import Image, ImageDraw
 
 RATIOS = {"16x9": 1366, "16x10": 1230}
 RECIPE = "whole-frame-v2-atlas-bottom768"
-PACK_RECIPE = "isolated-background-native-overlays-v9"
+PACK_RECIPE = "isolated-background-native-overlays-v10"
 CLEAN_PLATES = {"club_dans_render_02.tga": ["club_disko02.xml"]}
 EXCLUDE = {"startup.xml", "menu.xml", "map.xml", "chemodan.xml", "shiva.xml",
            "trax.xml", "gameboom.xml", "gameover.xml", "happyend.xml", "intro.xml",
@@ -546,6 +546,11 @@ def pack(work, ratio, require_complete=False):
     if set(map(asset_key,sampler))&set(map(asset_key,replacements)):
         raise ValueError('Native sampler repair overlaps another replacement')
     replacements.update(sampler)
+    from widescreen_exits import build_exit_replacements
+    exits,exit_proof=build_exit_replacements(archive,overlay_scenes-original_scenes(work,manifest),width)
+    if set(map(asset_key,exits))&set(map(asset_key,replacements)):
+        raise ValueError('Exit placement overlaps another replacement')
+    replacements.update(exits)
     folder=work/"mod"/ratio;folder.mkdir(parents=True,exist_ok=True)
     # Archive.build also retains unchanged compressed payloads/duplicate ordering.
     data=archive.build(replacements)
@@ -576,6 +581,7 @@ def pack(work, ratio, require_complete=False):
                modifiedForegroundMeshes=sorted(foreground),posterOccluders=poster_proof,
                nativeOverlays=overlay_proof,intrinsicNativePlanesPreserved=config['preserved'],
                nativeSamplerClamps=sampler_proof,
+               boundaryExits=exit_proof,
                originalAlphaMattesPreserved=True,originalCenterRgbComposited=False,
                generatedBackgrounds=len(ready),eligibleScenes=allowed,modifiedMeshes=sorted(affected),
                completeRequestedWorldBackgrounds=set(ready)==required,
