@@ -10,7 +10,12 @@ import sys
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    command = argv.pop(0) if argv and argv[0] in ('setup', 'studio') else 'setup'
+    command = argv.pop(0) if argv and argv[0] in ('setup', 'studio', 'launcher') else 'setup'
+    if command == 'launcher':
+        from pathlib import Path
+        sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'tools'))
+        import titbit_launcher
+        return titbit_launcher.main(argv)
     if command == 'studio':
         import start_studio
         sys.argv = ['titbit-tools studio', *argv]

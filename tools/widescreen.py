@@ -20,7 +20,7 @@ import subprocess
 import sys
 import tempfile
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(ROOT / "editor"))
 from formats import Archive, asset_key, parse_mat, parse_meat, parse_scene, write_meat
 from PIL import Image, ImageDraw
@@ -116,7 +116,7 @@ def plane_model(part):
                 windings=sorted(windings))
 
 
-def extract(archive_path, work):
+def extract(archive_path, work, export_sources=True):
     work = Path(work)
     work.mkdir(parents=True, exist_ok=True)
     archive_path = Path(archive_path).resolve()
@@ -178,11 +178,12 @@ def extract(archive_path, work):
                     if key not in textures:
                         ident = slug(tn)
                         directory = work/"source"/ident
-                        directory.mkdir(parents=True, exist_ok=True)
-                        (directory/"original.tga").write_bytes(data)
                         center = im.convert("RGBA").crop((0, 256, 1024, 1024))
-                        center.save(directory/"center.png")
-                        (directory/"prompt.txt").write_text(prompt(tn)+"\n", encoding="utf-8")
+                        if export_sources:
+                            directory.mkdir(parents=True, exist_ok=True)
+                            (directory/"original.tga").write_bytes(data)
+                            center.save(directory/"center.png")
+                            (directory/"prompt.txt").write_text(prompt(tn)+"\n", encoding="utf-8")
                         textures[key] = dict(name=tn, id=ident, sourceSha256=digest(data),
                             centerRgbaSha256=digest(center.tobytes()), scenes=[], references=[])
                     row = textures[key]
@@ -204,6 +205,8 @@ def extract(archive_path, work):
                         mode="complete regenerated wide frame; no original center compositing",
                         sourceCrop=[0, 256, 1024, 768], ratios=RATIOS))
     save(work/"manifest.json", manifest)
+    if not export_sources:
+        return manifest
     (work/'scenes.txt').write_text('\n'.join(s['name'] for s in scenes)+'\n',encoding='utf-8')
     required={key for s in scenes if not s['excluded'] for key in s['backgrounds']}
     save(work/'generation-jobs.json', [dict(id=t['id'], texture=t['name'],

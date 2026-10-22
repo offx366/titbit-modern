@@ -73,11 +73,15 @@ def free_port(start=4318):
 
 
 def main():
+    import argparse
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--archive',type=pathlib.Path,help='Original QUEST.ezd to open')
+    args=parser.parse_args()
     root = tk.Tk()
     root.title(APP)
     root.resizable(False, False)
     cfg = load_config()
-    archive = find_archive(cfg)
+    archive = args.archive.resolve() if args.archive and args.archive.is_file() else find_archive(cfg)
     if archive is None:
         messagebox.showinfo(APP, 'Укажите файл QUEST.ezd из папки игры «Ядерный Титбит».\n'
                                  'Файл только читается и не изменяется.')

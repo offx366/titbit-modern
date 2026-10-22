@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "mods": {
+    "widescreen": {
+      "version": "0.1.0",
+      "size": 73319126,
+      "sha256": "c6ece439351d60751556f46f95e1a1a1c8e69046e47a9a8bf2fdf692086ce2b1",
+      "urls": [
+        "https://github.com/offx366/titbit-modern/releases/download/widescreen-v0.1.0/Titbit-Widescreen-0.1.0.titbitmod"
+      ],
+      "testedEngines": {
+        "windows": "7a10e56c1e5f20d8f21fa0f46b993fdcb76beb8e4280c3b8b66370a19216470a",
+        "linux": "5d065bf0e16f8de26a168df8be6938975221dbca158f551a2a2fac10d38ea619"
+      }
+    }
+  }
+}

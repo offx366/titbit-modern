@@ -24,6 +24,16 @@ Windows 10/11; Linux-порт собирается в нативный ELF32 и 
 
 ## Установка Windows
 
+### Экспериментальный лаунчер и Widescreen
+
+[Комплект Widescreen 0.1.0](https://github.com/offx366/titbit-modern/releases/tag/widescreen-v0.1.0)
+добавляет лаунчер с импортом ресурсов и управлением модом: оригинал 4:3, 16:9 или 16:10.
+Дорисованные фоны загружаются отдельно; архив собирается локально из вашей копии игры.
+Оригинальные данные сохраняются. Windows: `TitbitLauncher.exe`; Linux: `./Launch.sh`.
+[Установка, офлайн-пакет и устройство профилей](docs/LAUNCHER.md).
+
+### Основной релиз
+
 1. Скачайте `TitbitModern-*-windows-x64.zip` из [Releases](https://github.com/offx366/titbit-modern/releases)
    и распакуйте в любую папку, например `C:\Games\TitbitModern`.
 2. Запустите **TitbitSetup.exe** и укажите, откуда взять данные игры:

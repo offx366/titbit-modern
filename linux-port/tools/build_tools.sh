@@ -11,11 +11,17 @@ python3 -c 'import tkinter' 2>/dev/null || { echo "Install python3-tk first (the
 "$venv/bin/python" -m pip install -q -r "$root/requirements-tools.txt"
 "$venv/bin/python" -m PyInstaller --noconfirm --clean --onefile --name titbit-tools \
   --distpath "$root/build" --workpath "$work" --specpath "$work" \
-  --paths "$root/tools" --paths "$root/editor" \
+  --paths "$root/tools" --paths "$root/editor" --paths "$root/../tools" \
   --add-data "$root/editor/web:web" --add-data "$root/config/assets.json:config" \
+  --add-data "$root/../config/mods.json:config" \
+  --add-data "$root/../tools/widescreen_native_contours.json:tools" \
   --hidden-import server --hidden-import formats --hidden-import exporters \
   --hidden-import animation --hidden-import scene_runtime \
   --hidden-import titbit_setup --hidden-import start_studio \
+  --hidden-import titbit_launcher --hidden-import titbit_mods \
+  --hidden-import widescreen --hidden-import widescreen_menu --hidden-import widescreen_exits \
+  --hidden-import widescreen_foreground --hidden-import widescreen_occluders \
+  --hidden-import widescreen_native_overlays --hidden-import widescreen_native_masks \
   --exclude-module numpy \
   "$root/tools/titbit_tools.py"
 site=$("$venv/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')

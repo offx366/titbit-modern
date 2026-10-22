@@ -18,7 +18,7 @@ class PortableBoundaryTests(unittest.TestCase):
             root=Path(folder); game=root/'game'; game.mkdir(); tools=root/'tools';tools.mkdir()
             for name in ('TitbitModern.exe','TitbitSettings.exe'):
                 (game/name).write_bytes(b'MZ synthetic game executable')
-            for name in ('TitbitSetup.exe','TitbitStudio.exe'):
+            for name in ('TitbitSetup.exe','TitbitStudio.exe','TitbitLauncher.exe'):
                 (tools/name).write_bytes(b'MZ synthetic tool executable')
             for name in ('QUEST.ezd','intro.avi','save01.sav','private.txt','TitbitStudio.json'):
                 (game/name).write_bytes(b'USER DATA MUST STAY LOCAL')
