@@ -20,6 +20,7 @@
   <url type="bugtracker">https://github.com/offx366/titbit-modern/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.3.2" date="2026-10-22"/>
     <release version="0.3.0" date="2026-10-19"/>
   </releases>
 </component>
