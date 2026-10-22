@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 ROOT=Path(__file__).resolve().parents[1]
+BUNDLE_VERSION='widescreen-0.1.1-gated'
 
 
 def main():
@@ -36,7 +37,7 @@ def main():
         'sudo apt install libsdl2-2.0-0:i386 libavcodec60:i386 libavformat60:i386 libavutil58:i386 libswscale7:i386 libswresample4:i386 libgl1:i386 libglu1-mesa:i386 libstdc++6:i386\n'
         './Launch.sh\n\nNative ELF32 game + bundled x86-64 launcher. No Python or VC6 required.\n'
         'Original game assets are imported from your copy. Widescreen art is an optional download.\n').encode()
-    payloads['package.json']=json.dumps(dict(version='widescreen-0.1.0',source='https://github.com/offx366/titbit-modern/tree/widescreen-outpaint',
+    payloads['package.json']=json.dumps(dict(version=BUNDLE_VERSION,source='https://github.com/offx366/titbit-modern/tree/widescreen-outpaint',
         sourceCommit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
         originalGameAssetsIncluded=False,generatedModArtIncluded=False)).encode()
     checks=''.join(hashlib.sha256(data).hexdigest()+'  '+n+'\n'for n,data in sorted(payloads.items()))
@@ -76,7 +77,7 @@ def windows(engine,launcher,output):
         files['docs/licenses/runtime/'+path.parent.name+'-license.terms']=path
     payloads={n:f.read_bytes()for n,f in files.items()}
     payloads['НАЧНИТЕ ЗДЕСЬ.txt']=('Ядерный Титбит\n\nЗапустите TitbitLauncher.exe.\n«Файлы игры» — импорт вашей копии.\n«Моды» — установка Widescreen.\n«Игра» — запуск с модом или без него.\n\nПодробности: README.md\nPython и VC6 не требуются. Исходные ресурсы не входят в комплект.\n').encode('utf-8-sig')
-    payloads['package.json']=json.dumps(dict(version='widescreen-0.1.0',source='https://github.com/offx366/titbit-modern/tree/widescreen-outpaint',
+    payloads['package.json']=json.dumps(dict(version=BUNDLE_VERSION,source='https://github.com/offx366/titbit-modern/tree/widescreen-outpaint',
         sourceCommit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
         originalGameAssetsIncluded=False,generatedModArtIncluded=False)).encode()
     payloads['SHA256SUMS.txt']=''.join(hashlib.sha256(data).hexdigest()+'  '+n+'\n'for n,data in sorted(payloads.items())).encode()

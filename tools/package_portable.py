@@ -30,7 +30,7 @@ def tools():
         raise ValueError('Установите зависимости сборки: python -m pip install -r requirements-build.txt') from exc
     out = BASE/'build/portable-tools'; out.mkdir(parents=True, exist_ok=True)
     inputs = [BASE/'config/assets.json', BASE/'VERSION', BASE/'tools/project_version.py']
-    inputs += [BASE/'tools'/n for n in ('titbit_setup.py','titbit_assets.py','titbit_launcher.py','titbit_mods.py','disc_image.py','project_icon.py')]
+    inputs += [BASE/'tools'/n for n in ('titbit_setup.py','titbit_assets.py','titbit_launcher.py','titbit_mods.py','titbit_gate.py','disc_image.py','project_icon.py')]
     inputs += list((BASE/'tools').glob('widescreen*.py')) + [BASE/'tools/widescreen_native_contours.json',BASE/'config/mods.json']
     inputs += [p for p in (BASE/'editor').rglob('*') if p.is_file()
                and not any(part in ('__pycache__','projects','TitbitStudio-projects') for part in p.relative_to(BASE/'editor').parts)

@@ -128,12 +128,14 @@ class Launcher:
         self.label(p,'WIDESCREEN  /  0.1.0','Head.TLabel')
         self.label(p,'Дорисованные локации и меню, расширенный обзор, курсор и переходы у краёв экрана. 16:9 и 16:10. Три согласованные сцены подвала остаются в 4:3.')
         record=mods.catalog()
-        self.label(p,f'Локальный пакет: {record["size"]/1024/1024:.1f} МиБ · 39 изображений\nГрафический пакет не распространяется. Онлайн-установка отключена.\nПакет: SHA256 {record["sha256"][:20]}…','Muted.TLabel')
-        self.label(p,'Установка из локального пакета проверяет совместимость файлов и собирает отдельный QUEST.ezd. Проверка наличия оригинальной игры не предоставляет разрешения на распространение графики.','Muted.TLabel')
+        self.label(p,f'Пакет: {record["size"]/1024/1024:.1f} МиБ · 39 изображений\nЗакрытая выдача после проверки файлов оригинальной игры.\nSHA256 {record["sha256"][:20]}…','Muted.TLabel')
+        self.label(p,'Сначала импортируйте вашу копию из папки, диска или ISO на вкладке «Файлы игры». Затем сервер проверит ответ по случайным участкам всех 19 файлов и выдаст одноразовый доступ. На сервер отправляется только ответ проверки, не ваши файлы.','Muted.TLabel')
         self.ttk.Label(p,text='Формат установки',style='Muted.TLabel').pack(anchor='w')
         self.ratio=self.tk.StringVar(value='16x9')
         self.ttk.Combobox(p,textvariable=self.ratio,values=['16x9','16x10'],state='readonly',width=16).pack(anchor='w',pady=(5,12))
         actions=self.ttk.Frame(p);actions.pack(anchor='w')
+        if record.get('gateway'):
+            self.button(actions,'Подтвердить файлы и скачать',lambda:self.install_mod(None)).pack(side='left',padx=(0,8))
         self.button(actions,'Из .titbitmod…',self.local_mod).pack(side='left')
         self.button(p,'Удалить мод выбранного формата',self.remove_mod).pack(anchor='w',pady=(12,10))
         self.label(p,'Оригинальный архив сохраняется. Удаление мода сохраняет ваши .sav в папке резервных профилей лаунчера. Пакет можно сохранить для офлайн-установки.','Muted.TLabel')
@@ -215,8 +217,11 @@ class Launcher:
         base,ratio=self.data.get(),self.ratio.get()
         def work():
             if mods.installed(self.store,ratio):raise ValueError('Этот формат уже установлен.')
-            mods.check_base(base,self.report,self.cancel)
-            path=package or mods.download(mods.catalog(),self.store/'downloads',self.report,self.cancel)
+            if package:
+                mods.check_base(base,self.report,self.cancel);path=package
+            else:
+                import titbit_gate
+                path=titbit_gate.obtain(mods.catalog(),base,self.store/'downloads',self.report,self.cancel)
             mods.install_verified(path,base,self.store,ratio,self.report,self.cancel)
             return 'Мод установлен: '+ratio.replace('x',':')+'. Выберите его на вкладке «Игра».'
         self.task(work)
@@ -286,14 +291,24 @@ def main(argv=None):
     p.add_argument('--data',type=Path,default=data);p.add_argument('--store',type=Path,default=store);p.add_argument('--engine',type=Path,default=engine)
     p.add_argument('--check',action='store_true',help='Check local original data without opening a window')
     p.add_argument('--install-mod',type=Path,help='Install offline mod without opening a window')
+    p.add_argument('--download-mod',action='store_true',help='Verify original files, request private download and install')
+    p.add_argument('--source',type=Path,help='Import your ISO/disc/folder into --data before --download-mod')
     p.add_argument('--ratio',choices=('16x9','16x10'),default='16x9')
     p.add_argument('--report',type=Path,help='Save CLI result as JSON')
     a=p.parse_args(argv)
-    if a.check or a.install_mod:
+    if a.check or a.install_mod or a.download_mod:
         code=0
         try:
             with mods.locked(a.store):
-                result=(dict(installed=str(mods.install(a.install_mod,a.data,a.store,a.ratio))) if a.install_mod else mods.check_base(a.data))
+                if a.download_mod:
+                    if a.source:
+                        plan=assets.inspect_source(a.source)
+                        try:assets.install_assets(plan,a.data)
+                        finally:plan.close()
+                    import titbit_gate
+                    package=titbit_gate.obtain(mods.catalog(),a.data,a.store/'downloads')
+                    result=dict(installed=str(mods.install_verified(package,a.data,a.store,a.ratio)))
+                else:result=(dict(installed=str(mods.install(a.install_mod,a.data,a.store,a.ratio))) if a.install_mod else mods.check_base(a.data))
         except Exception as exc:result={'error':str(exc)};code=1
         if a.report:mods.write_json(a.report,result)
         if sys.stdout is not None:print(json.dumps(result,ensure_ascii=False))

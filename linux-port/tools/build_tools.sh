@@ -18,7 +18,7 @@ python3 -c 'import tkinter' 2>/dev/null || { echo "Install python3-tk first (the
   --hidden-import server --hidden-import formats --hidden-import exporters \
   --hidden-import animation --hidden-import scene_runtime \
   --hidden-import titbit_setup --hidden-import start_studio \
-  --hidden-import titbit_launcher --hidden-import titbit_mods \
+  --hidden-import titbit_launcher --hidden-import titbit_mods --hidden-import titbit_gate \
   --hidden-import widescreen --hidden-import widescreen_menu --hidden-import widescreen_exits \
   --hidden-import widescreen_foreground --hidden-import widescreen_occluders \
   --hidden-import widescreen_native_overlays --hidden-import widescreen_native_masks \
