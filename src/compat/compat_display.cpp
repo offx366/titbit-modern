@@ -19,6 +19,7 @@ static bool wide_scene;
 static unsigned overlay_depth;
 static bool cursor_projection;
 static bool inventory_projection;
+static bool wide_menu_active, wide_menu_frame;
 static bool WideRequested() {
  static int configured = -1;
  if (configured < 0) configured = CompatSettingIs("aspect", "fit", "widescreen");
@@ -29,6 +30,7 @@ static bool Exclusive() {
  return exclusive;
 }
 static bool WideActive() { return !Exclusive() && wide_scene && WideRequested(); }
+static bool WideCanvasActive() { return !Exclusive() && WideRequested() && (wide_scene || wide_menu_active); }
 extern "C" const char *__stdcall CompatInitialScene(void) {
  static char scene[128];
  char enabled[8], desktop[256]; DWORD needed;
@@ -157,10 +159,10 @@ static RECT WindowPlacement(DWORD style, DWORD ex_style) {
                       work.top + ((work.bottom - work.top) - result.bottom) / 2);
  return result;
 }
-static CompatViewport Viewport(HWND window) {
+static CompatViewport Viewport(HWND window, bool force_wide = false) {
  RECT rect = {0, 0, logical_width, logical_height};
  if (window) GetClientRect(window, &rect);
- if (WideActive()) {
+ if (WideActive() || force_wide) {
   char ratio[32]; CompatSetting("widescreen_ratio", "auto", ratio, sizeof(ratio));
   bool ten = lstrcmpiA(ratio, "16:10") == 0 ||
              (lstrcmpiA(ratio, "auto") == 0 && rect.right * 10 < rect.bottom * 17);
@@ -198,17 +200,25 @@ extern "C" double __stdcall CompatWorldMouseX(double original_ndc) {
  return vp.width > 0 ? original_ndc * (4.0 / 3.0) * vp.height / vp.width : original_ndc;
 }
 extern "C" void __stdcall CompatBeginOverlay(void) {
+ if (!overlay_depth) wide_menu_frame = false;
  ++overlay_depth;
  if (game_window && WideActive()) SetViewport(CenterViewport(game_window));
 }
 extern "C" void __stdcall CompatEndOverlay(void) {
  if (overlay_depth) --overlay_depth;
- if (game_window && WideActive()) SetViewport(Viewport(game_window));
+ if (!overlay_depth) wide_menu_active = wide_menu_frame;
+ if (game_window && WideCanvasActive()) SetViewport(Viewport(game_window,true));
 }
 extern "C" int __stdcall CompatBeginFullscreenEffect(float x, float y, float width, float height,
                                                      float uv_width, float uv_height) {
- if (!game_window || !WideActive() || !overlay_depth || cursor_projection || inventory_projection) return 0;
+ if (!game_window || Exclusive() || !WideRequested() || !overlay_depth || cursor_projection || inventory_projection) return 0;
  float matrix[16]; glGetFloatv(GL_MODELVIEW_MATRIX, matrix);
+ if (CompatIsWideMenuBackground(matrix,x,y,width,height,uv_width,uv_height)) {
+  wide_menu_frame = wide_menu_active = true;
+  SetViewport(Viewport(game_window,true));
+  return 2;
+ }
+ if (!WideActive()) return 0;
  if (!CompatIsFullscreenEffect(matrix,x,y,width,height,uv_width,uv_height)) return 0;
  // Keep the original 1024x768 orthographic coordinates, but span the world
  // viewport for this single photometric mask. All other UI stays central.
@@ -219,9 +229,9 @@ extern "C" void __stdcall CompatEndFullscreenEffect(int expanded) {
  if (expanded && game_window) SetViewport(CenterViewport(game_window));
 }
 extern "C" void __stdcall CompatBeginCursorOverlay(void) {
- cursor_projection = game_window && WideActive();
+ cursor_projection = game_window && WideCanvasActive();
  if (!cursor_projection) return;
- CompatViewport vp = Viewport(game_window);
+ CompatViewport vp = Viewport(game_window,true);
  double margin = vp.height > 0 ? ((double)vp.width * 768.0 / vp.height - 1024.0) * 0.5 : 0;
  SetViewport(vp);
  glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity();
@@ -288,9 +298,9 @@ static LRESULT CALLBACK ModernWindowProc(HWND window, UINT message, WPARAM w, LP
  }
  if (message == WM_ERASEBKGND) return 1;
  if (message >= WM_MOUSEMOVE && message <= WM_MBUTTONDBLCLK) {
-  CompatViewport vp = Viewport(window);
+  CompatViewport vp = Viewport(window,WideCanvasActive());
   int x = (short)LOWORD(l), y = (short)HIWORD(l), lx, ly;
-  bool inside = WideActive() ? CompatMapWorldMouse(vp, CenterViewport(window), x, y, &lx, &ly)
+  bool inside = WideCanvasActive() ? CompatMapWorldMouse(vp, CenterViewport(window), x, y, &lx, &ly)
                             : CompatMapMouse(vp, x, y, logical_width, logical_height, &lx, &ly);
   if (!inside && message != WM_MOUSEMOVE) return 0;
   l = MAKELPARAM((short)lx, (short)ly);

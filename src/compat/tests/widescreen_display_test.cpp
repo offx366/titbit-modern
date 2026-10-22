@@ -118,6 +118,19 @@ int main() {
  CHECK(CompatWorldAspect(4.0/3.0)==4.0/3.0);
  CHECK(CompatOverlayMouseX("items",-170.0f)==-170.0f);
  glGetIntegerv(GL_VIEWPORT,view);CHECK(view[0]==200 && view[2]==1200);
+ // Generated menu background spans the canvas even in a central-only scene;
+ // ordinary UI coordinates and the original world projection remain central.
+ CompatBeginOverlay();
+ glMatrixMode(GL_MODELVIEW);glLoadIdentity();
+ int menu=CompatBeginFullscreenEffect(0,0,1024,768,1230.0f/2048.0f,-.75f);
+ CHECK(menu==2);glGetIntegerv(GL_VIEWPORT,view);CHECK(view[0]==80 && view[2]==1440);
+ CompatEndFullscreenEffect(menu);glGetIntegerv(GL_VIEWPORT,view);CHECK(view[0]==200 && view[2]==1200);
+ CompatBeginCursorOverlay();glGetIntegerv(GL_VIEWPORT,view);CHECK(view[0]==80 && view[2]==1440);
+ CompatEndCursorOverlay();CompatEndOverlay();
+ CHECK(CompatWorldAspect(4.0/3.0)==4.0/3.0);
+ SendMessageA(window,WM_MOUSEMOVE,0,MAKELPARAM(85,450));CHECK(mouse_x<0 && mouse_y==384);
+ CompatBeginOverlay();CompatEndOverlay(); // closing the menu clears UI width
+ SendMessageA(window,WM_MOUSEMOVE,0,MAKELPARAM(85,450));CHECK(mouse_x==-1 && mouse_y==-1);
  CHECK(glGetError()==GL_NO_ERROR);
  wglMakeCurrent(0,0);wglDeleteContext(gl);ReleaseDC(window,dc);DestroyWindow(window);
  DeleteFileA("widescreen-scenes.txt");

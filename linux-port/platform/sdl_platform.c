@@ -23,6 +23,7 @@ struct TBWindow { SDL_Window *window; SDL_GLContext context; struct TBWindow *ne
 };
 static TBWindow *windows;
 static int widescreen_scene, widescreen_world, widescreen_overlay_depth;
+static int widescreen_menu_active, widescreen_menu_frame;
 static int overlay_scissor[4], overlay_scissor_enabled;
 static int cursor_overlay_depth, cursor_scissor[4], cursor_matrix_mode;
 static int inventory_overlay_depth, inventory_scissor[4], inventory_matrix_mode, inventory_scissor_enabled;
@@ -67,7 +68,8 @@ double WIDE_API CompatWorldAspect(double original) {
  return widescreen_world ? widescreen_width()/768.0 : original;
 }
 void WIDE_API CompatBeginOverlay(void) {
- if(!widescreen_scene)return;
+ if(widescreen_width()<=1024)return;
+ if(!widescreen_overlay_depth)widescreen_menu_frame=0;
  if(!widescreen_overlay_depth){overlay_scissor_enabled=glIsEnabled(GL_SCISSOR_TEST);glGetIntegerv(GL_SCISSOR_BOX,overlay_scissor);}
  ++widescreen_overlay_depth;apply_viewport();
  int viewport[4];glGetIntegerv(GL_VIEWPORT,viewport);glEnable(GL_SCISSOR_TEST);glScissor(viewport[0],viewport[1],viewport[2],viewport[3]);
@@ -75,11 +77,17 @@ void WIDE_API CompatBeginOverlay(void) {
 void WIDE_API CompatEndOverlay(void) {
  if(!widescreen_overlay_depth)return;
  --widescreen_overlay_depth;
+ if(!widescreen_overlay_depth)widescreen_menu_active=widescreen_menu_frame;
  if(!widescreen_overlay_depth){glScissor(overlay_scissor[0],overlay_scissor[1],overlay_scissor[2],overlay_scissor[3]);if(!overlay_scissor_enabled)glDisable(GL_SCISSOR_TEST);}
  apply_viewport();
+ /* The completed drawable includes menu wings. Leave that full viewport for
+  * framebuffer capture; the next world pass reapplies its own camera viewport. */
+ if(!widescreen_overlay_depth && widescreen_menu_active) {
+  effect_overlay_depth=2;apply_viewport();effect_overlay_depth=0;
+ }
 }
 void WIDE_API CompatBeginCursorOverlay(void) {
- if(!widescreen_scene)return;
+ if(!widescreen_scene && !widescreen_menu_active)return;
  if(cursor_overlay_depth++){return;}
  glGetIntegerv(GL_SCISSOR_BOX,cursor_scissor);glGetIntegerv(GL_MATRIX_MODE,&cursor_matrix_mode);
  apply_viewport();int vp[4];glGetIntegerv(GL_VIEWPORT,vp);glScissor(vp[0],vp[1],vp[2],vp[3]);
@@ -110,13 +118,15 @@ void WIDE_API CompatEndInventoryOverlay(void) {
  if(inventory_scissor_enabled)glEnable(GL_SCISSOR_TEST);else glDisable(GL_SCISSOR_TEST);
 }
 int WIDE_API CompatBeginFullscreenEffect(float x,float y,float width,float height,float du,float dv) {
- if(!widescreen_scene || !widescreen_world || !widescreen_overlay_depth || cursor_overlay_depth || inventory_overlay_depth || effect_overlay_depth)return 0;
+ if(widescreen_width()<=1024 || !widescreen_overlay_depth || cursor_overlay_depth || inventory_overlay_depth || effect_overlay_depth)return 0;
  float matrix[16];glGetFloatv(GL_MODELVIEW_MATRIX,matrix);
- if(!CompatIsFullscreenEffect(matrix,x,y,width,height,du,dv))return 0;
+ int menu=CompatIsWideMenuBackground(matrix,x,y,width,height,du,dv);
+ if(!menu && (!widescreen_scene || !widescreen_world || !CompatIsFullscreenEffect(matrix,x,y,width,height,du,dv)))return 0;
+ if(menu)widescreen_menu_frame=widescreen_menu_active=1;
  glGetIntegerv(GL_SCISSOR_BOX,effect_scissor);effect_scissor_enabled=glIsEnabled(GL_SCISSOR_TEST);
- effect_overlay_depth=1;apply_viewport();
+ effect_overlay_depth=menu?2:1;apply_viewport();
  int viewport[4];glGetIntegerv(GL_VIEWPORT,viewport);glEnable(GL_SCISSOR_TEST);glScissor(viewport[0],viewport[1],viewport[2],viewport[3]);
- return 1;
+ return effect_overlay_depth;
 }
 void WIDE_API CompatEndFullscreenEffect(int expanded) {
  if(!expanded || !effect_overlay_depth)return;
@@ -136,7 +146,9 @@ static void apply_viewport(void) {
  TBWindow *w=event_window(0);if(!w||!SDL_GL_GetCurrentContext())return;
  int width,height;SDL_GL_GetDrawableSize(w->window,&width,&height);
  TBViewport vp=tb_fit_viewport(width,height,w->presentation_width,w->logical_height);
- if(w->presentation_width>w->logical_width && !(widescreen_world&&(!widescreen_overlay_depth||cursor_overlay_depth||inventory_overlay_depth||effect_overlay_depth))) {
+ if(w->presentation_width>w->logical_width && !(effect_overlay_depth ||
+    (cursor_overlay_depth && widescreen_menu_active) ||
+    (widescreen_world&&(!widescreen_overlay_depth||cursor_overlay_depth||inventory_overlay_depth)))) {
   int central=(int64_t)vp.width*w->logical_width/w->presentation_width;
   vp.x+=(vp.width-central)/2;vp.width=central;
  }
@@ -297,7 +309,7 @@ int tb_poll_event(TBEvent *out) {
    out->lparam=(intptr_t)(1u|((sc&0xff)<<16)|(down?(e.key.repeat?0x40000000u:0):0xc0000000u));return 1;}
   if(e.type==SDL_MOUSEMOTION){TBWindow *w=event_window(e.motion.windowID);
    if(w&&w->presentation){TBViewport vp=mouse_viewport(w);int x,y;
-    if(widescreen_scene)tb_map_world_mouse(vp,world_mouse_viewport(w),e.motion.x,e.motion.y,w->logical_width,w->logical_height,&x,&y);
+    if(widescreen_scene || widescreen_menu_active)tb_map_world_mouse(vp,world_mouse_viewport(w),e.motion.x,e.motion.y,w->logical_width,w->logical_height,&x,&y);
     else if(!tb_map_mouse(vp,e.motion.x,e.motion.y,w->logical_width,w->logical_height,&x,&y) && w->presentation_width>w->logical_width) {
      /* A central menu must not hover its x=0 buttons while the pointer is
       * on a widescreen side bar. Preserve the legacy 4:3 clamping policy. */
@@ -312,7 +324,7 @@ int tb_poll_event(TBEvent *out) {
   if(e.type==SDL_MOUSEBUTTONDOWN||e.type==SDL_MOUSEBUTTONUP){unsigned button=e.button.button;int down=e.type==SDL_MOUSEBUTTONDOWN;
    TBWindow *w=event_window(e.button.windowID);if(w&&w->presentation){int x,y;
     TBViewport vp=mouse_viewport(w);
-    int inside=widescreen_scene ? tb_map_world_mouse(vp,world_mouse_viewport(w),e.button.x,e.button.y,w->logical_width,w->logical_height,&x,&y)
+    int inside=(widescreen_scene || widescreen_menu_active) ? tb_map_world_mouse(vp,world_mouse_viewport(w),e.button.x,e.button.y,w->logical_width,w->logical_height,&x,&y)
                                : tb_map_mouse(vp,e.button.x,e.button.y,w->logical_width,w->logical_height,&x,&y);
     if(!inside&&down)continue;e.button.x=x;e.button.y=y;
    }

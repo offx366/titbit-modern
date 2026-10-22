@@ -27,7 +27,7 @@ from PIL import Image, ImageDraw
 
 RATIOS = {"16x9": 1366, "16x10": 1230}
 RECIPE = "whole-frame-v2-atlas-bottom768"
-PACK_RECIPE = "isolated-background-native-overlays-v10"
+PACK_RECIPE = "isolated-background-native-overlays-v11"
 CLEAN_PLATES = {"club_dans_render_02.tga": ["club_disko02.xml"]}
 EXCLUDE = {"startup.xml", "menu.xml", "map.xml", "chemodan.xml", "shiva.xml",
            "trax.xml", "gameboom.xml", "gameover.xml", "happyend.xml", "intro.xml",
@@ -551,6 +551,11 @@ def pack(work, ratio, require_complete=False):
     if set(map(asset_key,exits))&set(map(asset_key,replacements)):
         raise ValueError('Exit placement overlaps another replacement')
     replacements.update(exits)
+    from widescreen_menu import build_menu_replacements
+    menu,menu_proof=build_menu_replacements(archive,work,width)
+    if set(map(asset_key,menu))&set(map(asset_key,replacements)):
+        raise ValueError('Menu repair overlaps another replacement')
+    replacements.update(menu)
     folder=work/"mod"/ratio;folder.mkdir(parents=True,exist_ok=True)
     # Archive.build also retains unchanged compressed payloads/duplicate ordering.
     data=archive.build(replacements)
@@ -582,6 +587,7 @@ def pack(work, ratio, require_complete=False):
                nativeOverlays=overlay_proof,intrinsicNativePlanesPreserved=config['preserved'],
                nativeSamplerClamps=sampler_proof,
                boundaryExits=exit_proof,
+               widescreenMenu=menu_proof,
                originalAlphaMattesPreserved=True,originalCenterRgbComposited=False,
                generatedBackgrounds=len(ready),eligibleScenes=allowed,modifiedMeshes=sorted(affected),
                completeRequestedWorldBackgrounds=set(ready)==required,
@@ -689,7 +695,7 @@ def make_report(work):
     captures=load(work/"captures.json") if (work/"captures.json").exists() else {}
     reviews=load(work/"reviews.json") if (work/"reviews.json").exists() else {}
     accepted={t["name"] for t in manifest["textures"] if (work/"out"/(t["id"]+".json")).exists()}
-    current={};current_allowlists={}
+    current={};current_allowlists={};current_menus={}
     for ratio in RATIOS:
         proofpath=work/'mod'/ratio/'proof.json'
         if not proofpath.exists():continue
@@ -702,6 +708,7 @@ def make_report(work):
                 proof.get('userSelectedOriginalScenes',[])==sorted(original_scenes(work,manifest))):
             current[ratio]=actual
             current_allowlists[ratio]=file_hash(work/'mod'/ratio/'widescreen-scenes.txt')
+            current_menus[ratio]=bool(proof.get('widescreenMenu'))
     lines=["# Widescreen validation", "", f"Source archive SHA256: `{manifest['archiveSha256']}`", "",
            f"Scenes inventoried: {len(manifest['scenes'])}. Background candidates: {len(manifest['textures'])}. "
            f"Generated/accepted: {len(accepted)}.", "",
@@ -712,6 +719,7 @@ def make_report(work):
         name=scene["name"]
         state="4:3 UI/cutscene/minigame" if scene["excluded"] else "; ".join(scene["unresolved"]) or ("background mapped" if scene["backgrounds"] else "no full-plane background; review needed")
         if asset_key(name) in retained:state='4:3 original: explicit user exception'
+        if asset_key(name)=='menu.xml' and any(current_menus.values()):state='wide menu background; native UI metrics'
         captured=captures.get(name,{})
         runs=[]
         for ratio in RATIOS:
@@ -721,7 +729,8 @@ def make_report(work):
             if evidence and (evidence.get('inputs',{}).get('archiveSha256')!=current.get(ratio) or
                     evidence.get('inputs',{}).get('allowlistSha256')!=current_allowlists.get(ratio)):
                 status='STALE CAPTURE: rerun required'
-            if evidence and not evidence.get('expanded'):status+=' central fallback'
+            if evidence and not evidence.get('expanded'):
+                status+=' wide menu UI (central world camera)' if asset_key(name)=='menu.xml' and current_menus.get(ratio) else ' central fallback'
             runs.append(f"{ratio}: [{status}]({screenshot})" if screenshot else f'{ratio}: {status}')
         runtime='<br>'.join(runs)
         review=reviews.get(name,{}).get("notes","UNREVIEWED: crop, occlusion, walk boundary, moving camera")
