@@ -31,6 +31,9 @@ class PortableBoundaryTests(unittest.TestCase):
                 self.assertIn('TitbitModern/editor/README.md',names)
                 self.assertIn('TitbitModern/docs/GETTING_STARTED.md',names)
                 self.assertFalse(json.loads(z.read('TitbitModern/package.json'))['originalDataIncluded'])
+                self.assertEqual([n for n in names if Path(n).suffix=='.exe' and n.count('/')==1],['TitbitModern/Titbit.exe'])
+                self.assertIn('TitbitModern/bin/TitbitGame.exe',names)
+                self.assertNotIn('TitbitModern/TitbitSetup.exe',names)
                 for n in names:
                     self.assertNotIn(b'USER DATA MUST STAY LOCAL',z.read(n))
             self.assertEqual((game/'save01.sav').read_bytes(),b'USER DATA MUST STAY LOCAL')

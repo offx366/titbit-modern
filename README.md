@@ -26,10 +26,11 @@ Windows 10/11; Linux-порт собирается в нативный ELF32 и 
 
 ### Экспериментальный лаунчер и Widescreen
 
-Ветка `widescreen-outpaint` содержит [отдельный лаунчер](https://github.com/offx366/titbit-modern/releases/tag/launcher-gated-v0.1.1)
-с импортом ресурсов и профилями оригинала, 16:9 и 16:10. Widescreen устанавливается
-из приватного хранилища после серверной проверки файлов вашей копии игры.
-Прямой публичной ссылки на графический пакет нет.
+Ветка `widescreen-outpaint` содержит [комплект с единым запуском](https://github.com/offx366/titbit-modern/releases/tag/launcher-v0.2.0).
+**Titbit.exe** в Windows, **Launch.sh** в Linux: импорт вашей копии, игра, настройки, моды и Studio.
+**Моды → Widescreen → Установить** — по желанию; галочка включает и отключает мод.
+Формат экрана подбирается автоматически. Пакет загружается из приватного хранилища
+после проверки локальных файлов игры.
 [Установка и устройство профилей](docs/LAUNCHER.md).
 
 ### Основной релиз
@@ -171,7 +172,7 @@ py -3.11 -m venv .venv
 
 Результат — `build/modern-portable/TitbitModern.exe` и `TitbitSettings.exe`.
 Импорт данных: `python tools/titbit_setup.py --import "D:\Titbit.iso" --dest build/modern-portable`.
-Portable-пакет как в Releases (с TitbitSetup и TitbitStudio):
+Portable-пакет с единым лаунчером и Studio:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-build.txt

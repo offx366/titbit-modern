@@ -30,7 +30,7 @@ def tools():
         raise ValueError('Установите зависимости сборки: python -m pip install -r requirements-build.txt') from exc
     out = BASE/'build/portable-tools'; out.mkdir(parents=True, exist_ok=True)
     inputs = [BASE/'config/assets.json', BASE/'VERSION', BASE/'tools/project_version.py']
-    inputs += [BASE/'tools'/n for n in ('titbit_setup.py','titbit_assets.py','titbit_launcher.py','titbit_mods.py','titbit_gate.py','disc_image.py','project_icon.py')]
+    inputs += [BASE/'tools'/n for n in ('titbit_setup.py','titbit_assets.py','titbit_launcher.py','titbit_profiles.py','titbit_mods.py','titbit_gate.py','disc_image.py','project_icon.py')]
     inputs += list((BASE/'tools').glob('widescreen*.py')) + [BASE/'tools/widescreen_native_contours.json',BASE/'config/mods.json']
     inputs += [p for p in (BASE/'editor').rglob('*') if p.is_file()
                and not any(part in ('__pycache__','projects','TitbitStudio-projects') for part in p.relative_to(BASE/'editor').parts)
@@ -71,8 +71,8 @@ def tools():
 def assemble(game_build, tool_build, output, version=VERSION):
     game_build, tool_build, output = map(lambda p:Path(p).resolve(), (game_build,tool_build,output))
     # Do not glob the game directory: it may already contain the user's data/saves.
-    sources = {n:game_build/n for n in ('TitbitModern.exe','TitbitSettings.exe')}
-    sources.update({n:tool_build/n for n in ('TitbitSetup.exe','TitbitStudio.exe','TitbitLauncher.exe')})
+    sources = {'Titbit.exe':tool_build/'TitbitLauncher.exe', 'bin/TitbitGame.exe':game_build/'TitbitModern.exe',
+               'bin/TitbitStudio.exe':tool_build/'TitbitStudio.exe'}
     for name, path in sources.items():
         if not path.is_file() or path.read_bytes()[:2] != b'MZ':
             raise ValueError('Не найден собранный '+name)
@@ -81,6 +81,7 @@ def assemble(game_build, tool_build, output, version=VERSION):
     with tempfile.TemporaryDirectory(prefix='titbit-package-',dir=output) as temp:
         package = Path(temp)/'TitbitModern'; package.mkdir()
         for name, path in sources.items():
+            (package/name).parent.mkdir(parents=True,exist_ok=True)
             shutil.copy2(path, package/name)
         (package/'titbit_compat.ini').write_text('[compat]\ndisplay=fullscreen\nresolution=1024x768\naspect=fit\nsetup=modern\ncd=folder\nvideo=auto\nreplay=off\n',encoding='ascii')
         for name in ('README.md','THIRD_PARTY_NOTICES.md'):
@@ -118,7 +119,7 @@ def assemble(game_build, tool_build, output, version=VERSION):
         for p in (BASE/'src/lanes').rglob('*LICENSE*'):
             if p.is_file():
                 target=package/p.relative_to(BASE);target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target)
-        (package/'НАЧНИТЕ ЗДЕСЬ.txt').write_text('Ядерный Титбит · Лаунчер\n\n1. Распакуйте всю папку из ZIP.\n2. Откройте TitbitLauncher.exe. Вкладка «Файлы игры» — импорт вашей копии из папки, диска или ISO/IMG/CUE/CCD.\n3. На вкладке «Игра» запустите оригинал 4:3.\n4. По желанию: вкладка «Моды» → формат → «Скачать и установить». Затем выберите Widescreen на вкладке «Игра».\n\nИнструкция: docs-launcher.md. Python и VC6 не нужны. Исходные ассеты не входят в комплект.\nTitbitModern.exe — прямой запуск без лаунчера; TitbitSettings.exe — прежние настройки; TitbitStudio.exe — редактор.\n\nEXE не подписаны. Проверка файлов — docs/VERIFY.md.\n',encoding='utf-8-sig')
+        (package/'НАЧНИТЕ ЗДЕСЬ.txt').write_text('Ядерный Титбит\n\nОткройте Titbit.exe.\nПри первом запуске укажите вашу копию игры.\n«Моды» → Widescreen → «Установить» — по желанию.\n«Играть» — запуск. Studio и настройки открываются там же.\n\nФайлы bin/ служебные. Python и VC6 не нужны.\nИнструкция: docs-launcher.md\n',encoding='utf-8-sig')
         try:
             commit=subprocess.check_output(['git','-C',str(BASE),'rev-parse','HEAD'],stderr=subprocess.DEVNULL).decode().strip()
             dirty=bool(subprocess.check_output(['git','-C',str(BASE),'status','--porcelain','--untracked-files=no']))

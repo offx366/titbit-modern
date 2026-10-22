@@ -2,6 +2,8 @@
   "schema": 1,
   "mods": {
     "widescreen": {
+      "name": "Widescreen",
+      "summary": "Расширенные локации и меню. Формат экрана подбирается автоматически.",
       "version": "0.1.0",
       "size": 73319126,
       "sha256": "c6ece439351d60751556f46f95e1a1a1c8e69046e47a9a8bf2fdf692086ce2b1",

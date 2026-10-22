@@ -24,10 +24,10 @@ def main():
         nonlocal stage
         try:
             if time.monotonic()-start>40:raise RuntimeError('GUI verification timed out')
-            if stage<3:
-                page=['game','mods','files'][stage];app.show(page);root.update()
+            if stage<4:
+                page=['game','mods','settings','files'][stage];app.show(page);root.update()
                 screenshot(root,out/(page+'.bmp'));result['screenshots'].append(page);stage+=1
-            elif stage==3:
+            elif stage==4:
                 app.verify_data();stage+=1
             elif not app.busy:
                 result['status']=app.status.get()

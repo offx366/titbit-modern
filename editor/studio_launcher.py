@@ -21,6 +21,8 @@ if sys.stderr is None or sys.stdout is None:
     sys.stdout = sys.stdout or _log
     sys.stderr = sys.stderr or _log
 HERE = pathlib.Path(sys.executable if getattr(sys, 'frozen', False) else __file__).resolve().parent
+if HERE.name == 'bin' and getattr(sys, 'frozen', False):
+    HERE = HERE.parent
 CONFIG = HERE/'TitbitStudio.json'
 CANDIDATES = [HERE, HERE.parent, HERE/'game', HERE.parent/'build/modern-portable',
               HERE.parent/'build/modern', pathlib.Path.cwd(),

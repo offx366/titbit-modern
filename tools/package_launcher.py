@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 ROOT=Path(__file__).resolve().parents[1]
-BUNDLE_VERSION='widescreen-0.1.1-gated'
+BUNDLE_VERSION='launcher-0.2.0'
 
 
 def main():
@@ -20,7 +20,7 @@ def main():
     p.add_argument('--out',type=Path,required=True);a=p.parse_args()
     if a.engine.suffix.lower()=='.exe':
         return windows(a.engine,a.tools,a.out)
-    files={'titbit':a.engine,'titbit-tools':a.tools,'README.md':ROOT/'docs/LAUNCHER.md',
+    files={'bin/titbit-game':a.engine,'bin/titbit-tools':a.tools,'README.md':ROOT/'docs/LAUNCHER.md',
            'THIRD_PARTY_NOTICES.md':ROOT/'THIRD_PARTY_NOTICES.md','config/assets.json':ROOT/'config/assets.json',
            'config/mods.json':ROOT/'config/mods.json'}
     for base,prefix in ((ROOT/'docs/licenses','docs/licenses'),(a.tools.parent/'tools-licenses','docs/licenses/runtime')):
@@ -31,7 +31,7 @@ def main():
     for path in (ROOT/'src/lanes').rglob('*LICENSE*'):
         if path.is_file():files[path.relative_to(ROOT).as_posix()]=path
     payloads={n:f.read_bytes()for n,f in files.items()}
-    payloads['Launch.sh']=b'#!/bin/sh\nset -eu\nroot=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexport TITBIT_LINUX_GAME="$root/titbit"\nexec "$root/titbit-tools" launcher "$@"\n'
+    payloads['Launch.sh']=b'#!/bin/sh\nset -eu\nroot=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexport TITBIT_LINUX_GAME="$root/bin/titbit-game"\nexec "$root/bin/titbit-tools" launcher "$@"\n'
     payloads['LINUX.txt']=('Ubuntu 24.04 x86-64:\n'
         'sudo dpkg --add-architecture i386\nsudo apt update\n'
         'sudo apt install libsdl2-2.0-0:i386 libavcodec60:i386 libavformat60:i386 libavutil58:i386 libswscale7:i386 libswresample4:i386 libgl1:i386 libglu1-mesa:i386 libstdc++6:i386\n'
@@ -46,8 +46,8 @@ def main():
     with a.out.open('wb')as raw,gzip.GzipFile(fileobj=raw,mode='wb',filename='',mtime=0)as compressed,tarfile.open(fileobj=compressed,mode='w')as archive:
         for name,data in sorted(payloads.items()):
             if Path(name).suffix.lower()in('.ezd','.avi','.sav','.png','.tga','.titbitmod'):raise ValueError('Forbidden player data')
-            entry=tarfile.TarInfo('TitbitLauncher/'+name);entry.size=len(data);entry.mtime=0
-            entry.mode=0o755 if name in('titbit','titbit-tools','Launch.sh')else 0o644
+            entry=tarfile.TarInfo('Titbit/'+name);entry.size=len(data);entry.mtime=0
+            entry.mode=0o755 if name in('bin/titbit-game','bin/titbit-tools','Launch.sh')else 0o644
             archive.addfile(entry,io.BytesIO(data))
     print(json.dumps(dict(path=str(a.out),sha256=hashlib.sha256(a.out.read_bytes()).hexdigest(),size=a.out.stat().st_size)))
 
@@ -56,8 +56,7 @@ def windows(engine,launcher,output):
     import shutil
     from tempfile import TemporaryDirectory
     # Tool set is deliberately enumerated. Never package a player's directory.
-    files={'TitbitModern.exe':engine,'TitbitSettings.exe':engine.parent/'TitbitSettings.exe',
-        'TitbitLauncher.exe':launcher,'TitbitSetup.exe':launcher.parent/'TitbitSetup.exe','TitbitStudio.exe':launcher.parent/'TitbitStudio.exe',
+    files={'Titbit.exe':launcher,'bin/TitbitGame.exe':engine,'bin/TitbitStudio.exe':launcher.parent/'TitbitStudio.exe',
         'README.md':ROOT/'docs/LAUNCHER.md','THIRD_PARTY_NOTICES.md':ROOT/'THIRD_PARTY_NOTICES.md',
         'config/assets.json':ROOT/'config/assets.json','config/mods.json':ROOT/'config/mods.json'}
     for base,prefix in ((ROOT/'docs/licenses','docs/licenses'),):
@@ -76,7 +75,7 @@ def windows(engine,launcher,output):
     for path in (Path(sys.base_prefix)/'tcl').rglob('license.terms'):
         files['docs/licenses/runtime/'+path.parent.name+'-license.terms']=path
     payloads={n:f.read_bytes()for n,f in files.items()}
-    payloads['НАЧНИТЕ ЗДЕСЬ.txt']=('Ядерный Титбит\n\nЗапустите TitbitLauncher.exe.\n«Файлы игры» — импорт вашей копии.\n«Моды» — установка Widescreen.\n«Игра» — запуск с модом или без него.\n\nПодробности: README.md\nPython и VC6 не требуются. Исходные ресурсы не входят в комплект.\n').encode('utf-8-sig')
+    payloads['НАЧНИТЕ ЗДЕСЬ.txt']=('Ядерный Титбит\n\nОткройте Titbit.exe.\nПри первом запуске укажите папку игры, диск или ISO.\nПо желанию: «Моды» → Widescreen → «Установить».\nНажмите «Играть». Настройки и Studio находятся там же.\n\nФайлы bin/ служебные. Python и VC6 не нужны.\nИнструкция: README.md\n').encode('utf-8-sig')
     payloads['package.json']=json.dumps(dict(version=BUNDLE_VERSION,source='https://github.com/offx366/titbit-modern/tree/widescreen-outpaint',
         sourceCommit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
         originalGameAssetsIncluded=False,generatedModArtIncluded=False)).encode()
@@ -85,7 +84,7 @@ def windows(engine,launcher,output):
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=6)as archive:
         for name,data in sorted(payloads.items()):
             if Path(name).suffix.lower()in('.ezd','.avi','.sav','.png','.tga','.titbitmod'):raise ValueError('Forbidden player data')
-            archive.writestr('TitbitLauncher/'+name,data)
+            archive.writestr('Titbit/'+name,data)
     print(json.dumps(dict(path=str(output),sha256=hashlib.sha256(output.read_bytes()).hexdigest(),size=output.stat().st_size)))
 
 

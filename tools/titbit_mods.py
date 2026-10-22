@@ -50,11 +50,15 @@ def sha(path, cancel=None):
     return assets.hash_file(Path(path), cancel=cancel)
 
 
-def catalog():
+def all_mods():
     data = read_json(ROOT / 'config/mods.json')
     if data.get('schema') != 1:
         raise ValueError('Неподдерживаемый каталог модов')
-    return data['mods'][MOD_ID]
+    return data['mods']
+
+
+def catalog():
+    return all_mods()[MOD_ID]
 
 
 def check_base(base, progress=None, cancel=None):
@@ -317,6 +321,13 @@ def remove(store, ratio):
     """Remove only generated runtime files. Saves and user configuration survive."""
     profile = installed(store, ratio)
     if profile is None: raise ValueError('Мод не установлен')
+    return retire_profile(store, profile)
+
+
+def retire_profile(store, profile):
+    profile = Path(profile)
+    if profile.is_symlink() or profile.resolve().parent != (Path(store)/'profiles').resolve():
+        raise ValueError('Неверная папка профиля')
     # Atomic retirement first: unknown files/config/saves remain in this backup.
     saves = Path(store)/'saves'; saves.mkdir(parents=True, exist_ok=True)
     backup = saves/(profile.name+'-'+str(time.time_ns()))
@@ -337,7 +348,7 @@ def link_media(source, destination):
     except OSError: shutil.copy2(source, destination)
 
 
-def prepare_launch(base, store, engine, mode, display='fullscreen', resolution='desktop'):
+def prepare_launch(base, store, engine, mode, display='fullscreen', resolution='desktop', *, runtime_profile=None, seed_profiles=()):
     """Return argv/cwd/env without starting a process (also used by hidden QA)."""
     base, store, engine = Path(base).resolve(), Path(store).resolve(), Path(engine).resolve()
     if mode not in ('original', '16x9', '16x10'): raise ValueError('Неизвестный режим')
@@ -350,16 +361,28 @@ def prepare_launch(base, store, engine, mode, display='fullscreen', resolution='
     if not engine.is_file(): raise ValueError('Не найден движок игры: '+str(engine))
     if mode != 'original' and sha(engine) != catalog()['testedEngines']['windows' if os.name == 'nt' else 'linux']:
         raise ValueError('Для мода нужен движок из комплекта Widescreen 0.1.0. Обновите комплект лаунчера; старые версии игры не поддерживают широкое меню.')
-    profile = store/'profiles/original' if mode == 'original' else installed(store, mode)
-    if profile is None: raise ValueError('Сначала установите мод для выбранного формата')
+    source_profile = store/'profiles/original' if mode == 'original' else installed(store, mode)
+    if source_profile is None: raise ValueError('Сначала установите Widescreen')
+    profile = Path(runtime_profile) if runtime_profile else source_profile
     if profile.is_symlink() or profile.resolve().parent != profile.parent.resolve():
         raise ValueError('Профиль не должен быть ссылкой на другую папку')
     profile.mkdir(parents=True, exist_ok=True)
     if mode == 'original': link_media(original, profile/'QUEST.ezd')
     else:
-        marker = read_json(profile/'mod.json')
-        if sha(profile/'QUEST.ezd') != marker['archiveSha256']:
+        marker = read_json(source_profile/'mod.json')
+        if sha(source_profile/'QUEST.ezd') != marker['archiveSha256']:
             raise ValueError('Архив мода изменён; переустановите мод')
+        if profile != source_profile:
+            # Switch only generated files; keep one save location for both shapes.
+            for name in ('QUEST.ezd', 'widescreen-scenes.txt'):
+                target = profile/name
+                if target.is_symlink(): raise ValueError('Файл профиля является ссылкой')
+                if not target.exists() or sha(target) != sha(source_profile/name):
+                    temporary = target.with_suffix(target.suffix+'.tmp')
+                    temporary.unlink(missing_ok=True)
+                    link_media(source_profile/name, temporary)
+                    os.replace(temporary, target)
+            write_json(profile/'mod.json', marker)
     for name in assets.manifest():
         if not name.lower().endswith('.avi'): continue
         source = base/name
@@ -368,8 +391,16 @@ def prepare_launch(base, store, engine, mode, display='fullscreen', resolution='
         link_media(source, profile/name)
     # Independent saves, seeded once from the imported game; never hardlink saves.
     if not (profile/'.saves-seeded').exists():
-        backups = sorted((store/'saves').glob(profile.name+'-*')) if (store/'saves').exists() else []
+        backups = sorted(p for p in (store/'saves').glob(profile.name+'-*')
+                         if p.name.rsplit('-',1)[0] == profile.name) if (store/'saves').exists() else []
         old = backups[-1] if backups else store/'saves'/profile.name
+        # Existing variant saves win over the imported base; choose newest per slot.
+        if old.is_dir():
+            for source in old.glob('*.sav'):
+                if not (profile/source.name).exists(): shutil.copy2(source, profile/source.name)
+        seeds = [p for d in seed_profiles if Path(d).is_dir() for p in Path(d).glob('*.sav')]
+        for source in sorted(seeds, key=lambda p:p.stat().st_mtime_ns, reverse=True):
+            if not (profile/source.name).exists(): shutil.copy2(source, profile/source.name)
         for source_dir in (old, base):
             if source_dir.is_dir():
                 for source in source_dir.glob('*.sav'):
