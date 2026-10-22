@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Титбит — проверка WebAssembly</title>
+<style>
+  :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #141821; color: #e8edf6; }
+  body { max-width: 800px; margin: 10vh auto; padding: 24px; line-height: 1.6; }
+  h1 { line-height: 1.2; font-size: clamp(26px, 5vw, 42px); }
+  p { color: #b6c4d9; }
+  table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+  td { border-bottom: 1px solid #354056; padding: 12px 8px; }
+  .pass { color: #94e6ac; } .fail { color: #ffa7a7; }
+  button { font: inherit; padding: 10px 20px; border: 1px solid #6585ba; border-radius: 8px; background: #243c64; color: white; cursor: pointer; }
+  button:disabled { opacity: .5; }
+  #status { white-space: pre-wrap; }
+  a { color: #a9c8ff; }
+</style>
+<h1>Титбит → WebAssembly</h1>
+<p>Первый этап браузерного порта: выполнение C++ движка и интерпретатора SeeR.
+  Это техническая проверка, игровая локация пока не запускается.</p>
+<table aria-label="Проверки WebAssembly"><tbody id="results"></tbody></table>
+<button id="run" type="button">Повторить проверки</button>
+<p id="status" role="status">Загрузка WebAssembly…</p>
+<p>Модуль выполняется в вашем браузере. Данные игры и сервер исполнения ему не нужны.</p>
+<p><a href="save-probe.html">Проверка сохранений и загрузки</a></p>
+<script type="module" src="probe.js"></script>
+</html>

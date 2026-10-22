@@ -13,14 +13,15 @@ struct Derived : Base {
 };
 struct __declspec(align(8)) Aligned { char c; double d; };
 struct Mixed { char c; double d; int i; };
-int __stdcall stdcall_add(int a,int b) { return a+b; }
-int __thiscall explicit_thiscall_add(Base* b,int n) { return b->id+n; }
+__declspec(noinline) int __stdcall stdcall_add(int a,int b) { return a+b; }
+__declspec(noinline) int __thiscall explicit_thiscall_add(Base* b,int n) { return b->id+n; }
+__declspec(noinline) int virtual_value(Base *p) { return p->value(); }
 extern "C" int probe_run() {
     Derived d;
     Base *p=&d;
     if (sizeof(void*)!=4 || sizeof(long)!=4 || sizeof(Base)!=8 || sizeof(Derived)!=20)
         return 1;
-    if (p->value()!=37) return 2;
+    if (virtual_value(p)!=37) return 2;
     if (stdcall_add(3,4)!=7) return 3;
     if (explicit_thiscall_add(p,5)!=36) return 4;
     Mixed mixed;

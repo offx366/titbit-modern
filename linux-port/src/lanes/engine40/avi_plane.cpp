@@ -162,6 +162,7 @@ void AviPlane_0040b320::Key_0040bca0(unsigned char *p) {
 void AviPlane_0040b320::ShowFrame_0040bd20(long index) {
  struct DibInfo { unsigned long size; long w, h; unsigned short planes, bits; unsigned long compression, image, xppm, yppm, used; };
  DibInfo *dib = (DibInfo *)AVIStreamGetFrame(frames, index);
+ if (!dib) return;
  pixels = (char *)dib + dib->size + dib->used * 4;
  DrawDibDraw(drawDib, dc, 0, 0, width, height, dib, pixels, 0, 0, width, height, 0);
  SwapRedBlue_0040bc60(bits);
@@ -174,6 +175,7 @@ void AviPlane_0040b320::Start_0040be20() {
  dc = CreateCompatibleDC(0);
  drawDib = DrawDibOpen();
  Open_0040bb20(file);
+ if (!frames || !bits || !msPerFrame) return;
  texture = g_005ee6f0.Create_0042c760("texture256x256", 0, 0x400, 0x400, 0x20);
  playing = true;
  uvSize.x = (width * 0.0009765625f - 0.01f) * uvSize.x;
@@ -183,7 +185,7 @@ void AviPlane_0040b320::Start_0040be20() {
 
 void AviPlane_0040b320::Free_0040bed0() {
  Close_0040bde0();
- g_005ee6f0.Release_0042c570(texture);
+ if (texture) g_005ee6f0.Release_0042c570(texture);
 }
 
 // AVI.Create script function

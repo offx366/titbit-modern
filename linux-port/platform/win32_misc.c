@@ -50,9 +50,22 @@ int32_t WAPI GetStringTypeExA(uint32_t locale,uint32_t kind,const char *text,int
  iconv_close(conversion);freelocale(unicode);return 1;
 }
 void *WAPI GetCurrentProcess(void){return (void*)(intptr_t)-1;}
-int32_t WAPI FlushInstructionCache(void *process,const void *base,size_t size){(void)process;if(!base&&size){SetLastError(87);return 0;}if(base)__builtin___clear_cache((char*)base,(char*)base+size);return 1;}
+int32_t WAPI FlushInstructionCache(void *process,const void *base,size_t size){
+ (void)process;if(!base&&size){SetLastError(87);return 0;}
+ /* WebAssembly code is immutable and has no application-visible instruction cache. */
+#ifndef __EMSCRIPTEN__
+ if(base)__builtin___clear_cache((char*)base,(char*)base+size);
+#endif
+ return 1;
+}
 void WAPI DebugBreak(void){raise(SIGTRAP);}
-void *WAPI GetModuleHandleA(const char *name){void *handle=dlopen(name,RTLD_NOW|RTLD_LOCAL|(name?RTLD_NOLOAD:0));if(!handle)SetLastError(126);return handle;}
+void *WAPI GetModuleHandleA(const char *name){
+#ifdef __EMSCRIPTEN__
+ if(!name)return (void*)1;SetLastError(126);return NULL;
+#else
+ void *handle=dlopen(name,RTLD_NOW|RTLD_LOCAL|(name?RTLD_NOLOAD:0));if(!handle)SetLastError(126);return handle;
+#endif
+}
 typedef struct {uint16_t year,month,weekday,day,hour,minute,second,milliseconds;} SystemTime;
 void WAPI GetLocalTime(SystemTime *out){if(!out)return;struct timespec time;struct tm local;clock_gettime(CLOCK_REALTIME,&time);localtime_r(&time.tv_sec,&local);*out=(SystemTime){local.tm_year+1900,local.tm_mon+1,local.tm_wday,local.tm_mday,local.tm_hour,local.tm_min,local.tm_sec,time.tv_nsec/1000000};}
 typedef struct {uint16_t architecture,reserved;uint32_t page;void *minimum,*maximum;uintptr_t cpu_mask;uint32_t processors,type,granularity;uint16_t level,revision;} SystemInfo;

@@ -1,14 +1,14 @@
 <h1 align="center">Ядерный Титбит</h1>
 
-<p align="center"><b>Восстановленные исходники игры. Windows 10/11 и нативный Linux-порт.</b></p>
+<p align="center"><b>Восстановленные исходники игры. Windows 10/11, нативный Linux и браузер.</b></p>
 <p align="center">VZlab · Бука · 2003</p>
 
 ![Первая улица — сборка из этих исходников](docs/images/game-street.png)
 
 Код игры восстановлен по оригинальному `titbit.exe`. Сборка Windows работает на
 Windows 10/11; Linux-порт собирается в нативный ELF32 и использует SDL2, OpenGL и FFmpeg.
-Для современных Windows добавлены полный экран
-(**Alt+Enter / F11**), воспроизведение видео без старых кодеков и запуск без диска.
+Добавлены полный экран (**Alt+Enter / F11**), воспроизведение видео без старых кодеков
+и запуск без диска.
 
 > [!IMPORTANT]
 > **Для игры нужна ваша копия «Ядерного Титбита»** — оригинальный CD, образ диска
@@ -21,6 +21,13 @@ Windows 10/11; Linux-порт собирается в нативный ELF32 и 
 Права на игру, музыку и другие оригинальные материалы принадлежат их правообладателям, поэтому мы их не распространяем. ISO или установщик игры ищите на всем известных сайтах ;)
 
 </details>
+
+## Играть в браузере
+
+**[offx366.github.io/titbit-modern](https://offx366.github.io/titbit-modern/)** — без установки, в Chrome, Firefox или Edge.
+Выберите `QUEST.ezd` и 18 роликов из установленной игры или из папки после импорта TitbitSetup:
+файлы обрабатываются прямо в браузере и никуда не загружаются, сохранения остаются в браузере.
+Версия экспериментальная. Браузерный порт — [@Pentusha](https://github.com/Pentusha).
 
 ## Ветки
 
@@ -109,6 +116,8 @@ flatpak run io.github.offx366.Titbit
 
 Сборка из исходников: [linux-port/docs/BUILD-LINUX.md](linux-port/docs/BUILD-LINUX.md)
 (`python3 tools/build_linux.py --minimal`). Проверки: [VALIDATION-LINUX.md](docs/VALIDATION-LINUX.md).
+
+Сборка браузерной версии и подробности: [linux-port/docs/WEB.md](linux-port/docs/WEB.md).
 
 ## Titbit Studio
 

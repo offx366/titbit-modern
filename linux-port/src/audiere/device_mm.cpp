@@ -4,6 +4,10 @@
 #include "utility.h"
 
 
+#ifdef TITBIT_WASM_SOURCE
+extern "C" void tb_web_audio_poll(void* device);
+#endif
+
 namespace audiere {
 
   static const int RATE = 44100;
@@ -77,8 +81,20 @@ namespace audiere {
 
   void
   MMAudioDevice::update() {
+#ifdef TITBIT_WASM_SOURCE
+    // The worklet consumes PCM independently; acknowledge completed WinMM
+    // headers here, on the existing decoder worker, rather than the UI thread.
+    tb_web_audio_poll(m_device);
+#endif
     // if a buffer is done playing, add it to the queue again
-    for (int i = 0; i < BUFFER_COUNT; ++i) {
+    for (int n = 0; n < BUFFER_COUNT; ++n) {
+#ifdef TITBIT_WASM_SOURCE
+      // Several headers can finish while a decoder operation holds the mixer
+      // lock. Refill in playback order even when the array index wraps.
+      int i = m_current_buffer;
+#else
+      int i = n;
+#endif
       WAVEHDR& wh = m_buffers[i];
       if (wh.dwFlags & WHDR_DONE) {
 
@@ -103,7 +119,13 @@ namespace audiere {
         if (result != MMSYSERR_NOERROR) {
           ADR_LOG("waveOutWrite failed");
         }
+#ifdef TITBIT_WASM_SOURCE
+        m_current_buffer = (m_current_buffer + 1) % BUFFER_COUNT;
+#endif
       }
+#ifdef TITBIT_WASM_SOURCE
+      else break;
+#endif
     }
     Sleep(10);
   }

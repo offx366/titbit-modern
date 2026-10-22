@@ -70,6 +70,26 @@ ScriptHolder::~ScriptHolder() {
  if (program) free(program);
 }
 
+// Narrow repairs for inconsistent identifiers in the shipped script data.
+// They are applied to the temporary compiler input, never to QUEST.ezd.
+static void RepairScriptToken(char *&text, unsigned &size, const char *before, const char *after) {
+ unsigned oldSize = 0, newSize = 0;
+ while (before[oldSize]) ++oldSize;
+ while (after[newSize]) ++newSize;
+ for (unsigned offset = 0; offset + oldSize <= size; ++offset) {
+  unsigned match = 0;
+  while (match < oldSize && text[offset+match] == before[match]) ++match;
+  if (match != oldSize) continue;
+  unsigned total = size - oldSize + newSize;
+  char *fixed = (char *)operator new(total+1);
+  for (unsigned i = 0; i < offset; ++i) fixed[i] = text[i];
+  for (unsigned i = 0; i < newSize; ++i) fixed[offset+i] = after[i];
+  for (unsigned i = offset+oldSize; i <= size; ++i) fixed[i-oldSize+newSize] = text[i];
+  operator delete(text); text = fixed; size = total;
+  return;
+ }
+}
+
 // Particle (0x48 bytes): ctor 0x406760, empty destructor shared at 0x4051b0.
 // Load and compile a SeeR script file, then resolve the event handlers.
 bool ScriptHolder::Compile_0041a7f0(ObservedString file) {
@@ -83,6 +103,12 @@ bool ScriptHolder::Compile_0041a7f0(ObservedString file) {
  in.Read_004209b0(text, size);
  in.Close_00420a60();
  text[size] = 0;
+ // The pickup's click handler and the save schema use item_porno_disk.
+ if (lstrcmpA(file, "pornodisk.scv") == 0)
+  RepairScriptToken(text, size, "queststate.porno_disk", "queststate.item_porno_disk");
+ // loaddlg.scv restores lab03 from location 40; 31 denotes the hippie camp.
+ if (lstrcmpA(file, "anton_lab3.scv") == 0)
+  RepairScriptToken(text, size, "queststate.activelocation = 31;", "queststate.activelocation = 40;");
  if (!text) {
   PickingTrace("Can't open script (*.scv) file.");
   return false;

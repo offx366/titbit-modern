@@ -2,20 +2,9 @@
 // and the save-slot time stamp helpers.
 #include <stdio.h>
 #include <string.h>
+#include "quest_state.h"
 extern "C" __declspec(dllimport) void __stdcall GetLocalTime(struct _SYSTEMTIME *);
 struct _SYSTEMTIME { unsigned short wYear, wMonth, wDayOfWeek, wDay, wHour, wMinute, wSecond, wMilliseconds; };
-
-class QuestState { // original 0x41e580
-public:
- char header[0x2c];
- int vars[89];                        // +0x2c
- int tail[2];
- QuestState();
- ~QuestState();              // empty, shared at 0x4051b0
- void Reset_0041e630();
- int SaveGame_0041e590(const char *file);
- int LoadGame_0041e5e0(const char *file);
-};
 
 QuestState::QuestState() { Reset_0041e630(); }
 

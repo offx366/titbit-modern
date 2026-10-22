@@ -226,11 +226,15 @@ public:
 
 AviPlane_0040b320::AviPlane_0040b320() {
  bits = 0; frame = 0; finished = false; lastTime = 0; elapsed = 0;
+ stream = frames = bitmap = dc = drawDib = 0;
+ pad18 = 0; width = height = length = 0; msPerFrame = 0;
  loop = true; visible = 1;
 }
 AviPlane_0040b320::AviPlane_0040b320(int ownerObject) {
  owner = ownerObject;
  bits = 0; frame = 0; finished = false; lastTime = 0; elapsed = 0;
+ stream = frames = bitmap = dc = drawDib = 0;
+ pad18 = 0; width = height = length = 0; msPerFrame = 0;
  loop = true; visible = 1;
 }
 void AviPlane_0040b320::SwapRedBlue_0040bc60(unsigned char *pixels) {
@@ -250,18 +254,22 @@ extern "C" {
  __declspec(dllimport) int __stdcall MessageBoxA(void *, const char *, const char *, unsigned);
  __declspec(dllimport) void *__stdcall CreateDIBSection(void *, const void *, unsigned, void **, void *, unsigned long);
  __declspec(dllimport) void *__stdcall SelectObject(void *, void *);
+ __declspec(dllimport) int __stdcall DeleteDC(void *);
 }
 #ifdef TITBIT_COMPAT
 #include "../../compat/compat.h"   /* VfW frame decoding without installed codecs (src/compat/README.md) */
 #endif
 void AviPlane_0040b320::Open_0040bb20(const char *file) {
  AVIFileInit();
- if (AVIStreamOpenFromFileA(&stream, file, 0x73646976, 0, 0, 0) != 0)
+ if (AVIStreamOpenFromFileA(&stream, file, 0x73646976, 0, 0, 0) != 0) {
   MessageBoxA(0, "Failed To Open The AVI Stream", "Error", 0x30);
- AVIStreamInfoA(stream, &info, sizeof(info));
+  return;
+ }
+ if (AVIStreamInfoA(stream, &info, sizeof(info)) != 0) return;
  width = info.right - info.left;
  height = info.bottom - info.top;
  length = AVIStreamLength(stream);
+ if (length <= 0 || width <= 0 || height <= 0) return;
  long total = AVIStreamSampleToTime(stream, length);
  bmi.width = width;
  bmi.height = height;
@@ -270,6 +278,7 @@ void AviPlane_0040b320::Open_0040bb20(const char *file) {
  bmi.bitCount = 32;
  bmi.compression = 0;
  msPerFrame = total / length;
+ if (!msPerFrame) msPerFrame = 1;
  bitmap = CreateDIBSection(dc, &bmi, 0, &bits, 0, 0);
  SelectObject(dc, bitmap);
  frames = AVIStreamGetFrameOpen(stream, 0);
@@ -282,6 +291,8 @@ void AviPlane_0040b320::Close_0040bde0() {
  DrawDibClose(drawDib);
  AVIStreamGetFrameClose(frames);
  AVIStreamRelease(stream);
+ DeleteDC(dc);
+ stream = frames = bitmap = dc = drawDib = bits = 0;
  AVIFileExit();
 }
 void AviPlane_0040b320::Tick_0040bef0() {

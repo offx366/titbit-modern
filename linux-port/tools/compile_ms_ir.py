@@ -120,10 +120,19 @@ def main():
     parser.add_argument('--jobs', type=int, default=4)
     parser.add_argument('--filter', default='')
     parser.add_argument('--with-runtime', action='store_true')
+    parser.add_argument('--wasm', action='store_true', help='Use portable Wasm setjmp and codec arithmetic')
     parser.add_argument('--runtime-only', action='store_true')
     parser.add_argument('--extra-source', action='append', default=[])
     parser.add_argument('--out', type=Path)
+    parser.add_argument('--win32-headers', type=Path, default=Path('/usr/i686-w64-mingw32/include'))
+    parser.add_argument('--resource-dir', type=Path, help='Clang resource directory (for split toolchain outputs)')
+    parser.add_argument('--portable', type=Path, help='Override the project-owned portable header directory')
     args = parser.parse_args()
+    args.win32_headers = args.win32_headers.resolve()
+    if args.portable:
+        args.portable = args.portable.resolve()
+    if args.resource_dir:
+        args.resource_dir = args.resource_dir.resolve()
     sdk = args.vc98.resolve() if args.vc98 else None
     if sdk and not (sdk/'Include').is_dir():
         parser.error('--vc98 must point to an installed VC98 directory')
@@ -146,20 +155,24 @@ def main():
             '-O2', '-fno-strict-aliasing', '-fno-omit-frame-pointer', '-fdelayed-template-parsing',
             '-ffunction-sections', '-fdata-sections', '-ferror-limit=16',
             '-Wno-ignored-attributes', '-Wno-pragma-pack', '-Wno-microsoft-cast']
-    portable = ROOT/'portable' if (ROOT/'portable').is_dir() else ROOT.parent/'portable'
-    # __FILE__ (SeeR error strings) and the module name must not depend on where the
-    # checkout lives, so the same sources build the same ELF in any folder.
+    portable = args.portable or (ROOT/'portable' if (ROOT/'portable').is_dir() else ROOT.parent/'portable')
+    # Preserve the base branch's path-independent Linux builds while allowing
+    # the browser frontend to override its portable headers and target macros.
     base += ['-ffile-prefix-map='+str(ROOT)+'=linux-port',
              '-ffile-prefix-map='+str(portable.resolve())+'=portable']
+    if args.wasm:
+        base += ['-DTITBIT_WASM_SOURCE']
     if sdk:
         base += ['-ivfsoverlay', str(overlay)]
     else:
         resource = subprocess.check_output([compiler, '-print-resource-dir'], text=True).strip()
+        if args.resource_dir:
+            resource = str(args.resource_dir)
         base += ['-nostdinc', '-DTITBIT_PORTABLE_HEADERS', '-fgnuc-version=4.2.1',
                  '-D__MINGW32__', '-D__i386__', '-D_X86_',
                  '-I', str(portable/'include/win32'), '-I', str(portable/'include/cxx'),
                  '-I', str(portable/'include/crt'), '-isystem', resource+'/include',
-                 '-isystem', '/usr/i686-w64-mingw32/include']
+                 '-isystem', str(args.win32_headers)]
     start = time.monotonic()
 
     def compile_one(row):

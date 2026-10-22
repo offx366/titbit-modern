@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ядерный Титбит</title>
+<link rel="icon" href="data:,">
+<style>
+body{margin:0;background:#14171a;color:#e8e9e5;font:16px system-ui;text-align:center}main{max-width:1100px;margin:20px auto;padding:0 16px}h1{font-size:24px}button,input{font:inherit}button{padding:8px 18px}#status{min-height:24px}canvas{display:block;background:#000;width:min(1024px,100%,calc((100vh - 150px)*4/3));height:auto;aspect-ratio:4/3;margin:16px auto;outline:none}details{text-align:left}pre{white-space:pre-wrap;max-height:200px;overflow:auto;font-size:12px}
+</style>
+<main>
+<h1>Ядерный Титбит</h1>
+<section id="files">
+<div id="file-pickers">
+<p>Выберите QUEST.ezd из вашей копии игры. Файл обрабатывается в браузере.</p>
+<input id="archive" type="file" accept=".ezd">
+<p><label>Видеофайлы игры (обязательно выберите все 18 AVI): <input id="videos" type="file" accept=".avi" multiple></label></p>
+</div>
+<button id="start" disabled>Играть</button>
+</section>
+<p id="status" role="status">Подготовка движка…</p>
+<canvas id="canvas" width="1024" height="768" tabindex="0" aria-label="Игра"></canvas>
+<p id="asset-storage" role="status"></p>
+<p id="storage" role="status">Сохранения доступны через игровое меню (Escape).</p>
+<details><summary>Перенос сохранений</summary>
+<label>Слот <select id="save-slot"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+<button id="export-save" disabled>Скачать .sav</button>
+<label>Загрузить .sav <input id="import-save" type="file" accept=".sav" disabled></label>
+</details>
+<details><summary>Журнал</summary><pre id="log"></pre></details>
+</main>
+<script type="module" src="bootstrap.js"></script>
+</html>

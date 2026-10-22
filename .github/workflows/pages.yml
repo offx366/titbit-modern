@@ -1,0 +1,74 @@
+name: Browser game / GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Cache pinned codec and Emscripten ports
+        uses: actions/cache@v5
+        with:
+          path: |
+            linux-port/build/web/game/emscripten-cache
+            linux-port/build/web/game/ffmpeg
+          key: web-deps-${{ runner.os }}-${{ hashFiles('flake.lock', 'linux-port/tools/build_web_ffmpeg.py') }}
+      - name: Build browser engine
+        run: nix develop .#web --command python3 linux-port/tools/build_web_game.py --jobs 2
+      - name: Check PCM and compiler guardrails
+        run: |
+          nix develop .#web --command node linux-port/tools/check_web_audio.mjs
+          nix develop .#web --command python3 linux-port/tools/check_web_lighting.py
+          nix develop .#web --command env TITBIT_WASM_VARARGS="$PWD/linux-port/build/web/game/wasm-varargs" python3 -m unittest discover -s linux-port/tools/tests -p 'test_*.py'
+      - name: Import original game data (optional)
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          TITBIT_GAME_MAGNET: ${{ secrets.TITBIT_GAME_MAGNET }}
+        run: nix develop .#web --command python3 linux-port/tools/prepare_web_assets.py --out .local/game-data
+      - name: Package static runtime
+        run: |
+          game_data_args=()
+          if [ -d .local/game-data ]; then
+            game_data_args=(--game-data .local/game-data)
+          fi
+          python3 linux-port/tools/package_web.py --out .local/pages "${game_data_args[@]}"
+      - name: Check static hosting in Chromium
+        run: |
+          nix develop .#web --command node linux-port/tools/check_web_pages.mjs .local/pages
+          nix develop .#web --command node linux-port/tools/check_web_assets.mjs .local/pages
+      - name: Upload Pages site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: .local/pages
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Deploy game
+        id: deployment
+        uses: actions/deploy-pages@v4

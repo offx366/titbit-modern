@@ -8,7 +8,9 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <sys/statvfs.h>
+#ifndef __EMSCRIPTEN__
 #include <sys/vfs.h>
+#endif
 #include <sys/stat.h>
 #if defined(__i386__)
 #define WAPI __attribute__((stdcall))
@@ -35,7 +37,11 @@ void WAPI CoUninitialize(void){/* A failed CoInitialize creates no COM apartment
 int32_t WAPI ShellExecuteExA(void *request){(void)request;fprintf(stderr,"Titbit: external-document launch is unavailable in this native build\n");SetLastError(50);return 0;}
 int WAPI wvsprintfA(char *out,const char *format,char *arguments){
  if(!out||!format){SetLastError(87);return 0;}
-#if defined(__i386__)
+#if defined(__EMSCRIPTEN__)
+ extern int tb_crt_vsnprintf(char *,size_t,const char *,const void *);
+ int result=tb_crt_vsnprintf(out,1024,format,arguments);
+ return result<0?0:result>1023?1023:result;
+#elif defined(__i386__)
  va_list list;memcpy(&list,&arguments,sizeof(list));int result=vsnprintf(out,1024,format,list);return result<0?0:result>1023?1023:result;
 #else
  (void)arguments;SetLastError(50);return 0;
@@ -57,6 +63,7 @@ int32_t WAPI ChangeDisplaySettingsA(const void *input,uint32_t flags){
  TBWindow *window=tb_win32_main_window();if(!window)return 0;
  return tb_window_move(window,0,0,width,height)?0:-1;
 }
+#ifndef __EMSCRIPTEN__
 uint32_t WAPI GetDriveTypeA(const char *root){char path[4096];struct statfs state;if(!root||!tb_resolve_path(root,path,sizeof(path),1)||statfs(path,&state)){SetLastError((uint32_t)errno);return 1;}if((unsigned long)state.f_type==0x9660)return 5;if((unsigned long)state.f_type==0x6969)return 4;if((unsigned long)state.f_type==0x01021994)return 6;return 3;}
 int32_t WAPI GetVolumeInformationA(const char *root,char *label,uint32_t label_size,uint32_t *serial,uint32_t *maximum,uint32_t *flags,char *filesystem,uint32_t filesystem_size){
  char path[4096];struct statvfs volume;struct statfs fs;if(!root||!tb_resolve_path(root,path,sizeof(path),1)||statvfs(path,&volume)||statfs(path,&fs)){SetLastError((uint32_t)errno);return 0;}
@@ -67,3 +74,10 @@ int32_t WAPI GetVolumeInformationA(const char *root,char *label,uint32_t label_s
  if(filesystem&&filesystem_size)snprintf(filesystem,filesystem_size,"Linux-%lx",(unsigned long)fs.f_type);
  return 1;
 }
+#else
+uint32_t GetDriveTypeA(const char *root){(void)root;return 3;}
+int32_t GetVolumeInformationA(const char *root,char *label,uint32_t label_size,uint32_t *serial,uint32_t *maximum,uint32_t *flags,char *filesystem,uint32_t filesystem_size){
+ (void)root;if(label&&label_size)*label=0;if(serial)*serial=0;if(maximum)*maximum=255;if(flags)*flags=0;
+ if(filesystem&&filesystem_size)snprintf(filesystem,filesystem_size,"Browser");return 1;
+}
+#endif
