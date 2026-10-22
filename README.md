@@ -40,7 +40,7 @@ Windows 10/11; Linux-порт собирается в нативный ELF32 и 
 
 ### Экспериментальный лаунчер и Widescreen
 
-Ветка `dev` содержит [комплект с единым запуском](https://github.com/offx366/titbit-modern/releases/tag/launcher-v0.2.0).
+Ветка `dev` содержит [комплект с единым запуском](https://github.com/offx366/titbit-modern/releases/tag/launcher-v0.2.1).
 **Titbit.exe** в Windows, **Launch.sh** в Linux: импорт вашей копии, игра, настройки, моды и Studio.
 **Моды → Widescreen → Установить** — по желанию; галочка включает и отключает мод.
 Формат экрана подбирается автоматически. Пакет загружается из приватного хранилища
