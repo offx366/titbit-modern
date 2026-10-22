@@ -25,7 +25,14 @@ def main():
         try:
             if time.monotonic()-start>40:raise RuntimeError('GUI verification timed out')
             if stage<4:
-                page=['game','mods','settings','files'][stage];app.show(page);root.update()
+                page=['game','mods','settings','files'][stage]
+                title=['Игра','Моды','Настройки','Файлы игры'][stage]
+                def find(widget):
+                    for child in widget.winfo_children():
+                        if child.winfo_class()=='TButton' and child.cget('text')==title:return child
+                        result=find(child)
+                        if result:return result
+                find(root).invoke();root.update()
                 screenshot(root,out/(page+'.bmp'));result['screenshots'].append(page);stage+=1
             elif stage==4:
                 app.verify_data();stage+=1
