@@ -414,7 +414,7 @@ def build_native_overlay_replacements(archive,scenes,background_textures,ratio_w
     for mode,items in [('split',NATIVE_PATCHES if registry is None else registry),('projected',PROJECTED_PLANES if projected_registry is None else projected_registry)]:
         for mn,rr in items.items():
             if isinstance(rr,list) and len(rr)!=1:raise ValueError('Exactly one repair per native overlay mesh is supported: '+mn)
-            for r in (rr if isinstance(rr,list)else [rr]):rules.append((mode,mn,r))
+            for r in (rr if isinstance(rr,list)else [rr]):rules.append(('projected' if r.get('projected') else mode,mn,r))
     replacements={};proof=dict(recipe='native-overlay-separation-v1',repairs=[],unchangedResources={})
     for mode,mn,rule in rules:
         tn=asset_key(rule['texture'])

@@ -6739,10 +6739,10 @@
       "scenes": [
         "nebo.xml"
       ],
-      "maskRecipe": "background",
       "meshSha256": "6484e171365fc0beb1f18603caf646d211a4c70b2c26f017c9791a364f66577d",
       "textureSha256": "734778f179935589305e1dd645142ea1933e68ba8a7dc6b6919d340a3add1d83",
-      "notes": "Full-width native cloud occlusion layer: regenerate its RGB from the new background but preserve original alpha, blend/culling/depth and geometry; no native prop pixels belong to this background layer."
+      "notes": "Cloud occlusion plane samples the dedicated background directly through the source camera, eliminating double-filtered 4:3 RGB seams. Native geometry/depth/blend and source alpha in the dedicated atlas are preserved; source-camera UV registration corrects the original subpixel offset.",
+      "projected": true
     },
     "Kvartira_kalian.meat": {
       "texture": "Kvartira_render3_a_smoke.tga",
