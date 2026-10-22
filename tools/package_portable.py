@@ -131,13 +131,14 @@ def assemble(game_build, tool_build, output, version=VERSION):
         for p in paths:
             if p.suffix.lower() in ('.ezd','.avi','.sav','.img','.iso','.cue','.ccd','.sub','.cab'):
                 raise ValueError('Original game data cannot be packaged: '+p.name)
-        (package/'SHA256SUMS.txt').write_text(''.join(f'{sha(p)}  {p.relative_to(package).as_posix()}\n' for p in paths),encoding='utf8')
+        (package/'SHA256SUMS.txt').write_text(''.join(f'{sha(p)}  {p.relative_to(package).as_posix()}\n' for p in paths),encoding='utf8',newline='\n')
         temporary=archive.with_suffix('.zip.tmp')
         with zipfile.ZipFile(temporary,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
             for p in sorted(package.rglob('*')):
                 if p.is_file():z.write(p,'TitbitModern/'+p.relative_to(package).as_posix())
         temporary.replace(archive)
-    archive.with_suffix('.zip.sha256').write_text(sha(archive)+'  '+archive.name+'\n',encoding='ascii')
+    # LF endings: `sha256sum -c` on Linux/macOS rejects the CR of Windows newlines
+    archive.with_suffix('.zip.sha256').write_text(sha(archive)+'  '+archive.name+'\n',encoding='ascii',newline='\n')
     print('Portable package: '+str(archive),flush=True)
     return archive
 
