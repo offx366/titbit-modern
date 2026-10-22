@@ -10,7 +10,7 @@
       "urls": [],
       "testedEngines": {
         "windows": "7a10e56c1e5f20d8f21fa0f46b993fdcb76beb8e4280c3b8b66370a19216470a",
-        "linux": "5d065bf0e16f8de26a168df8be6938975221dbca158f551a2a2fac10d38ea619"
+        "linux": "10fea4c2e533f64e6573d8cd9530fb9f29f0f31bff42954e145f9e3a88a57d65"
       },
       "distribution": "file-possession-gated-v1",
       "gateway": "https://titbit-mod-gateway.slop-machine.chatgpt.site"

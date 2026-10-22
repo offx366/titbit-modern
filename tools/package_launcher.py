@@ -9,9 +9,28 @@ import tarfile
 import zipfile
 import subprocess
 import sys
+import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
-BUNDLE_VERSION='launcher-0.2.0'
+BUNDLE_VERSION='launcher-0.2.1'
+
+# The minimal build (tools/build_linux.py --minimal) links SDL2, FFmpeg, GLU, zlib and
+# libstdc++ statically. Anything else here means a build against system libraries,
+# which then only starts on the distribution it was built on.
+ALLOWED_NEEDED={'libGL.so.1','libm.so.6','libc.so.6','ld-linux.so.2'}
+
+
+def linux_engine(path):
+    """Release-ready game ELF: minimal dependencies, build-time debug info removed."""
+    dynamic=subprocess.run(['readelf','-d',str(path)],capture_output=True,text=True,check=True).stdout
+    needed={line.split('[',1)[1].split(']',1)[0] for line in dynamic.splitlines() if '(NEEDED)' in line}
+    if needed-ALLOWED_NEEDED:
+        raise ValueError('Game ELF needs system libraries '+', '.join(sorted(needed-ALLOWED_NEEDED))+
+                         ': rebuild with tools/build_linux.py --minimal')
+    with tempfile.TemporaryDirectory() as temporary:
+        stripped=Path(temporary)/'titbit-game'
+        subprocess.run(['strip','--strip-debug','--remove-section=.comment','-o',str(stripped),str(path)],check=True)
+        return stripped.read_bytes()
 
 
 def main():
@@ -31,10 +50,14 @@ def main():
     for path in (ROOT/'src/lanes').rglob('*LICENSE*'):
         if path.is_file():files[path.relative_to(ROOT).as_posix()]=path
     payloads={n:f.read_bytes()for n,f in files.items()}
+    payloads['bin/titbit-game']=linux_engine(a.engine)
     payloads['Launch.sh']=b'#!/bin/sh\nset -eu\nroot=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexport TITBIT_LINUX_GAME="$root/bin/titbit-game"\nexec "$root/bin/titbit-tools" launcher "$@"\n'
-    payloads['LINUX.txt']=('Ubuntu 24.04 x86-64:\n'
-        'sudo dpkg --add-architecture i386\nsudo apt update\n'
-        'sudo apt install libsdl2-2.0-0:i386 libavcodec60:i386 libavformat60:i386 libavutil58:i386 libswscale7:i386 libswresample4:i386 libgl1:i386 libglu1-mesa:i386 libstdc++6:i386\n'
+    payloads['LINUX.txt']=('Linux with glibc 2.38+ (Ubuntu 24.04+, Debian 13+, Fedora 39+).\n'
+        'The game needs only 32-bit OpenGL, X11 and sound; video, SDL2 and the rest are built in.\n\n'
+        'Ubuntu / Debian:\n'
+        'sudo dpkg --add-architecture i386 && sudo apt update\n'
+        'sudo apt install libgl1:i386 libgl1-mesa-dri:i386 libx11-6:i386 libxext6:i386 libxcursor1:i386 libxi6:i386 libxrandr2:i386 libpulse0:i386\n'
+        '(with Steam installed they are usually already there)\n\n'
         './Launch.sh\n\nNative ELF32 game + bundled x86-64 launcher. No Python or VC6 required.\n'
         'Original game assets are imported from your copy. Widescreen art is an optional download.\n').encode()
     payloads['package.json']=json.dumps(dict(version=BUNDLE_VERSION,source='https://github.com/offx366/titbit-modern/tree/dev',
