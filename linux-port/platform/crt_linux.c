@@ -100,8 +100,12 @@ char *tb_crt_fgets(char *data,int count,MSFile *view){FILE*f=native_file(view);i
 int tb_crt_fputs(const char *data,MSFile *view){FILE*f=native_file(view);if(!f)return EOF;return fputs(data,f);}
 int tb_crt_ungetc(int c,MSFile *view){FILE*f=native_file(view);if(!f)return EOF;int result=ungetc(c,f);if(result!=EOF)view->flags&=~0x10;return result;}
 int tb_crt_setvbuf(MSFile *view,char *buffer,int mode,size_t size){FILE*f=native_file(view);if(!f)return -1;int native_mode=mode==4?_IONBF:(mode==0x40?_IOLBF:_IOFBF);return setvbuf(f,buffer,native_mode,size);}
+#ifndef __EMSCRIPTEN__
 int tb_crt_vfprintf(MSFile *view,const char *format,va_list arguments){FILE*f=native_file(view);return f?vfprintf(f,format,arguments):-1;}
 int tb_crt_fprintf(MSFile *view,const char *format,...){va_list args;va_start(args,format);int n=tb_crt_vfprintf(view,format,args);va_end(args);return n;}
+#else
+FILE *tb_crt_native_file(void *view){return native_file((MSFile*)view);}
+#endif
 int tb_crt_feof(MSFile *view){return (view->flags&0x10)!=0;}
 int tb_crt_ferror(MSFile *view){return (view->flags&0x20)!=0;}
 int tb_crt_fileno(MSFile *view){return view?view->descriptor:-1;}

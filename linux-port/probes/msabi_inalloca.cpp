@@ -17,11 +17,15 @@ class Receiver {
 public:
     Receiver():magic(100) {}
     __declspec(noinline) Word small(Word first,int n,Word last) {
+#ifndef TITBIT_WASM_PROBE
         inalloca_alignment_errors+=native_stack_align()!=0;
+#endif
         return Word(magic+first.value+n+last.value);
     }
     __declspec(noinline) Large large(Word first,Large second,double d) {
+#ifndef TITBIT_WASM_PROBE
         inalloca_alignment_errors+=native_stack_align()!=0;
+#endif
         return Large(first.value+second.x,second.y+int(d),second.z+magic);
     }
 };

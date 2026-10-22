@@ -14,6 +14,8 @@
             "titbit"
             "titbit-tools"
             "titbit-data"
+            "titbit-web-probe"
+            "titbit-web-objects"
           ];
       };
       formatter = pkgs.nixfmt;

@@ -66,7 +66,7 @@
 #  define max(x,y)  ((x)<(y)?(y):(x))
 #endif
 
-#if defined(__i386__) && defined(__GNUC__) && !defined(__BEOS__)
+#if defined(__i386__) && defined(__GNUC__) && !defined(__BEOS__) && !defined(TITBIT_WASM_SOURCE)
 #  define VORBIS_FPU_CONTROL
 /* both GCC and MSVC are kinda stupid about rounding/casting to int.
    Because of encapsulation constraints (GCC can't see inside the asm
@@ -103,7 +103,7 @@ static inline int vorbis_ftoi(double f){  /* yes, double!  Otherwise,
 #endif
 
 
-#if defined(_WIN32) && !defined(__GNUC__) && !defined(__BORLANDC__)
+#if defined(_WIN32) && !defined(__GNUC__) && !defined(__BORLANDC__) && !defined(TITBIT_WASM_SOURCE)
 #  define VORBIS_FPU_CONTROL
 
 typedef ogg_int16_t vorbis_fpu_control;
@@ -131,7 +131,12 @@ static __inline void vorbis_fpu_restore(vorbis_fpu_control fpu){
 typedef int vorbis_fpu_control;
 
 static int vorbis_ftoi(double f){
+#ifdef TITBIT_WASM_SOURCE
+  /* Wasm nearest implements the original default x87 ties-to-even mode. */
+  return (int)__builtin_nearbyint(f);
+#else
   return (int)(f+.5);
+#endif
 }
 
 /* We don't have special code for this compiler/arch, so do it the slow way */

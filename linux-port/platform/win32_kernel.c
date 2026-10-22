@@ -7,9 +7,14 @@
 #include <stddef.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
+#ifndef __EMSCRIPTEN__
 #include <sys/syscall.h>
+#endif
 #include <unistd.h>
 #include <errno.h>
+#ifndef SCHED_IDLE
+#define SCHED_IDLE SCHED_OTHER
+#endif
 #if defined(__i386__)
 #define WAPI __attribute__((stdcall))
 #else

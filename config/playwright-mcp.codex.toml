@@ -1,0 +1,3 @@
+[mcp_servers.playwright]
+command = "./scripts/playwright-mcp.sh"
+env_vars = ["PLAYWRIGHT_BROWSERS_PATH", "DISPLAY", "XAUTHORITY"]

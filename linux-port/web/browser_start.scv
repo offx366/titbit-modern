@@ -1,0 +1,30 @@
+#include scener
+#include queststate
+export ON_CREATE;
+export ON_TIME;
+bool started = false;
+
+// Follow the original New Game flow, starting after the introductory videos.
+void ON_CREATE() { self->CreateTimer(0, -1); }
+void ON_TIME(int timer) {
+    if (started) return;
+    started = true;
+    vec3_t position, size;
+    position.Assign(-63, 10, 0);
+    size.Assign(70, 630, 0);
+    if (scene.FindObjectByName("items") == NULL) {
+        GAME_OBJECT *items = CreateGameObject(1, "items.scv", position, size);
+        scene.Add(items, 2);
+    }
+    queststate.NewGame();
+    queststate.typepr = 0;
+    queststate.activelocation = 9;
+    scene.SetCursorType(0);
+    message m;
+    m.p_target = scene.FindObjectByName("mainmenu");
+    m.message_id = EM_NOTIFY;
+    m.lparam = 0;
+    scene.PostMessage(m);
+    scene.Load("sumerki_entrance.XML");
+    scene.DeleteObject(self);
+}

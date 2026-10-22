@@ -92,6 +92,12 @@ flatpak run io.github.offx366.Titbit
 Сборка из исходников: [linux-port/docs/BUILD-LINUX.md](linux-port/docs/BUILD-LINUX.md)
 (`python3 tools/build_linux.py --minimal`). Проверки: [VALIDATION-LINUX.md](docs/VALIDATION-LINUX.md).
 
+Экспериментальный перенос в браузер: [WebAssembly и Nix](linux-port/docs/WEB.md).
+Проверены все 70 сцен, 417 сценариев и 18 видеороликов: модели, анимации, диалоги,
+предметы и игровое меню исполняет исходный движок в WebAssembly. Сохранения из меню
+записываются в IndexedDB и загружаются после перезапуска страницы. Нужны ваши
+`QUEST.ezd` и AVI-файлы. Полное прохождение всех квестовых веток пока не проверено.
+
 ## Titbit Studio
 
 Редактор сцен в комплекте. В Windows запустите **TitbitStudio.exe**, в Linux —
